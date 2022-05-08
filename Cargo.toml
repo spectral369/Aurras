@@ -1,0 +1,42 @@
+[package]
+name = "aurras"
+version = "0.1.0"
+edition = "2021"
+authors = ["spectral369 <spectral369@freelancingpeter.eu>"] 
+description = "Discord Music Bot written in RUST"
+homepage = "freelancingpeter.eu"
+repository = "https://github.com/spectral369/aurras-bot/"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+twilight-model = "0.10.2"
+twilight-gateway = {version="0.10.1", default-features = false, features=["zlib-simd", "native"]}
+twilight-cache-inmemory = "0.10.2"
+twilight-util = {version="0.10.1", features = ["link","builder"]}
+twilight-embed-builder = "0.10.1"
+twilight-validate = "0.10.2"
+twilight-http = {version="0.10.2", features=["native"]}
+twilight-command-parser = "0.9.0"
+twilight-standby = "0.10.0"
+futures = "0.3.21"
+tokio = { version = "1.18.0", features = ["full"] }
+# songbird = { git = "https://github.com/serenity-rs/songbird", branch = "next", default-features = false, features = ["twilight-rustls", "zlib-simd", "driver"] }
+reqwest = { version = "0.11", features = ["json"] }
+lazy-static-include = "3.1.2"
+regex = "1.5.5"
+linked_hash_set = "0.1.4"
+
+[dependencies.songbird]
+default-features = false
+git = "https://github.com/serenity-rs/songbird.git"
+branch = "next"
+features = [ "yt-dlp"
+           , "twilight-rustls"
+           , "zlib-simd"
+           , "driver"
+           , "gateway"
+           ]
+
+[profile.release]
+lto = true
