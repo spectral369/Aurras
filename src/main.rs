@@ -22,7 +22,7 @@ use std::io::{BufRead, BufReader};
 use tokio::sync::RwLock;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 
-use twilight_gateway::{cluster::ShardScheme, Cluster, Event, Intents};
+use twilight_gateway::{Cluster, Event, Intents};
 use twilight_http::Client as HttpClient;
 use twilight_model::{
     channel::Message,
@@ -49,6 +49,7 @@ struct StateInfo {
     is_joined: bool,
     current_song_desc: String,
     current_song_link: String,
+    _yt_utils: yt_utils::YtInfo,
 }
 
 impl StateInfo {
@@ -86,22 +87,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         let http = HttpClient::new(token.clone());
         let user_id = http.current_user().exec().await?.model().await?.id;
 
-        let scheme = ShardScheme::Auto;
-
         let intents = Intents::GUILD_MESSAGES
             | Intents::DIRECT_MESSAGES
             | Intents::GUILD_MEMBERS
             | Intents::GUILDS
             | Intents::GUILD_VOICE_STATES
             | Intents::MESSAGE_CONTENT;
-        let (cluster, events) = Cluster::builder(token, intents)
-            .shard_scheme(scheme)
-            .build()
-            .await?;
+        let (cluster, events) = Cluster::builder(token, intents).build().await?;
 
         let thi = tokio::spawn(async move {
             cluster.up().await;
-            return Songbird::twilight(Arc::new(cluster), user_id);
+            return Songbird::twilight(Arc::new(cluster), user_id.get());
         });
         let songbird = thi.await?;
         (
@@ -112,13 +108,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 songbird,
                 standby: Standby::new(),
                 cache: InMemoryCache::builder()
-                    .resource_types(ResourceType::all())
+                    .resource_types(ResourceType::VOICE_STATE | ResourceType::GUILD)
                     .build(),
             }),
             Arc::new(Mutex::new(StateInfo {
                 is_joined: false,
                 current_song_desc: String::default(),
                 current_song_link: String::default(),
+                _yt_utils: Default::default(),
             })),
         )
     };
@@ -142,6 +139,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 Some("!stop") => spawn(stop(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
                 Some("!time") => spawn(time(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
                 Some("!desc") => spawn(description(
+                    msg.0,
+                    Arc::clone(&state),
+                    Arc::clone(&state_info),
+                )),
+                Some("!radiozu") => {
+                    spawn(radiozu(msg.0, Arc::clone(&state), Arc::clone(&state_info)))
+                }
+                Some("!radiovirgin") => spawn(radiovirgin(
                     msg.0,
                     Arc::clone(&state),
                     Arc::clone(&state_info),
@@ -185,7 +190,7 @@ async fn join(
 
     let (_handle, success) = state
         .songbird
-        .join(guild_id, channel_to_join.unwrap_or_default())
+        .join(guild_id.get(), channel_to_join.unwrap_or_default())
         .await;
 
     let content: String = match success {
@@ -217,7 +222,7 @@ async fn leave(
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let guild_id = msg.guild_id.unwrap();
     state_info.lock().unwrap().set_is_joined(false);
-    state.songbird.leave(guild_id).await?;
+    state.songbird.leave(guild_id.get()).await?;
 
     state
         .http
@@ -246,7 +251,9 @@ async fn play(
     }
     if state_info.lock().unwrap().is_joined {
         let b = msg.content.clone();
-        println!("{}", b);
+        //println!("{}", b);
+        let mut is_searchable: bool = false;
+        let mut is_empty: bool = false;
         let index1 = b.find(" ");
         let mut text: String;
         if !index1.is_none() {
@@ -262,9 +269,17 @@ async fn play(
         if re.is_match(&text) | re2.is_match(&text) {
             yt_link = text.to_string().to_string();
         } else if text.len() < 1 {
-            yt_link = String::from("http://astreaming.virginradio.ro:8000/virgin_aacp_64k");
+            //yt_link = String::from("http://astreaming.virginradio.ro:8000/virgin_aacp_64k");
+            state
+                .http
+                .create_message(msg.channel_id)
+                .content("Nothing to play")?
+                .exec()
+                .await?;
+            is_empty = true;
         } else {
-            let mut search_str: String =
+            is_searchable = true;
+            /*  let mut search_str: String =
                 String::from("https://www.youtube.com/results?search_query=");
             search_str.push_str(&text);
 
@@ -280,49 +295,97 @@ async fn play(
             state_info
                 .lock()
                 .unwrap()
-                .set_current_song_link(yt_link.clone());
+                .set_current_song_link(yt_link.clone());*/
         }
 
         let guild_id = msg.guild_id.unwrap();
+        if !is_empty {
+            if !is_searchable {
+                if let Ok(song) = ytdl(yt_link).await {
+                    let input = Input::from(song);
 
-        if let Ok(song) = ytdl(yt_link).await {
-            let input = Input::from(song);
+                    let content = format!(
+                        "Playing **{:?}** by **{:?}**",
+                        input
+                            .metadata
+                            .title
+                            .as_ref()
+                            .unwrap_or(&"<UNKNOWN>".to_string()),
+                        input
+                            .metadata
+                            .artist
+                            .as_ref()
+                            .unwrap_or(&"<UNKNOWN>".to_string()),
+                    );
 
-            let content = format!(
-                "Playing **{:?}** by **{:?}**",
-                input
-                    .metadata
-                    .title
-                    .as_ref()
-                    .unwrap_or(&"<UNKNOWN>".to_string()),
-                input
-                    .metadata
-                    .artist
-                    .as_ref()
-                    .unwrap_or(&"<UNKNOWN>".to_string()),
-            );
+                    state
+                        .http
+                        .create_message(msg.channel_id)
+                        .content(&content)?
+                        .exec()
+                        .await?;
 
-            state
-                .http
-                .create_message(msg.channel_id)
-                .content(&content)?
-                .exec()
-                .await?;
+                    if let Some(call_lock) = state.songbird.get(guild_id.get()) {
+                        let mut call = call_lock.lock().await;
+                        let handle = call.play_source(input);
 
-            if let Some(call_lock) = state.songbird.get(guild_id) {
-                let mut call = call_lock.lock().await;
-                let handle = call.play_source(input);
+                        let mut store = state.trackdata.write().await;
+                        store.insert(guild_id, handle);
+                    }
+                } else {
+                    state
+                        .http
+                        .create_message(msg.channel_id)
+                        .content("Didn't find any results")?
+                        .exec()
+                        .await?;
+                }
+            } else {
+                if let Ok(song) = songbird::input::ytdl_search(&text).await {
+                    let input = Input::from(song);
+                    let link = &input.metadata.source_url;
 
-                let mut store = state.trackdata.write().await;
-                store.insert(guild_id, handle);
+                    let link_str = link.to_owned().unwrap();
+
+                    state_info.lock().unwrap().set_current_song_link(link_str);
+
+                    let content = format!(
+                        "Playing **{:?}** by **{:?}**",
+                        input
+                            .metadata
+                            .title
+                            .as_ref()
+                            .unwrap_or(&"<UNKNOWN>".to_string()),
+                        input
+                            .metadata
+                            .artist
+                            .as_ref()
+                            .unwrap_or(&"<UNKNOWN>".to_string()),
+                    );
+
+                    state
+                        .http
+                        .create_message(msg.channel_id)
+                        .content(&content)?
+                        .exec()
+                        .await?;
+
+                    if let Some(call_lock) = state.songbird.get(guild_id.get()) {
+                        let mut call = call_lock.lock().await;
+                        let handle = call.play_source(input);
+
+                        let mut store = state.trackdata.write().await;
+                        store.insert(guild_id, handle);
+                    }
+                } else {
+                    state
+                        .http
+                        .create_message(msg.channel_id)
+                        .content("Didn't find any results")?
+                        .exec()
+                        .await?;
+                }
             }
-        } else {
-            state
-                .http
-                .create_message(msg.channel_id)
-                .content("Didn't find any results")?
-                .exec()
-                .await?;
         }
     }
     Ok(())
@@ -375,7 +438,7 @@ async fn stop(
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let guild_id = msg.guild_id.unwrap();
 
-    if let Some(call_lock) = state.songbird.get(guild_id) {
+    if let Some(call_lock) = state.songbird.get(guild_id.get()) {
         let mut call = call_lock.lock().await;
         let _ = call.stop();
     }
@@ -524,10 +587,14 @@ async fn time(
         } else {
             format!("Error gettting duration")
         };
+        let mut part1: String = "`".to_string().to_owned();
+        part1.push_str(&content);
+        part1.push_str("`");
+
         state
             .http
             .create_message(msg.channel_id)
-            .content(&content)?
+            .content(&part1)?
             .exec()
             .await?;
     }
@@ -558,9 +625,9 @@ async fn description(
         if let Some(handle) = store.get(&guild_id) {
             let h = handle.get_info().await;
             if h.is_ok() {
-                let content = reqwest::get(song_link).await?.text().await?;
+                let content = reqwest::get(&song_link).await?.text().await?;
 
-                let yt_struct = &yt_utils::get_link_content(content.as_str());
+                let yt_struct = &yt_utils::get_link_content(content.as_str(), song_link.clone());
 
                 state_info
                     .lock()
@@ -569,12 +636,19 @@ async fn description(
 
                 let to_split = yt_struct.get_yt_desc();
                 let re = Regex::new(r"\\n").unwrap();
-                let result = re.replace_all(&to_split, " \n ");
+                let result = re.replace_all(&to_split, "\n");
+                let re2 = Regex::new(r"(https://)|(http://)").unwrap();
+                let result2 = re2.replace_all(&result, "[http][//]");
 
+                let re3 = Regex::new(r"\n\n").unwrap();
+                let result3 = re3.replace_all(&result2, "\n");
+                let result_final: String = result3.chars().take(1999).collect();
+
+                // println!("{:?}", &result_final);
                 state
                     .http
                     .create_message(msg.channel_id)
-                    .content(&result)?
+                    .content(&result_final)?
                     .exec()
                     .await?;
             } else {
@@ -588,6 +662,132 @@ async fn description(
         }
     }
 
+    Ok(())
+}
+
+async fn radiozu(
+    msg: Message,
+    state: State,
+    state_info: Arc<Mutex<StateInfo>>,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    if !state_info.lock().unwrap().is_joined {
+        let res = join(msg.clone(), state.clone(), state_info.clone())
+            .await
+            .ok();
+
+        match res {
+            Some(result) => println!("{:?}", result),
+            None => println!("ERR"),
+        }
+    }
+    if state_info.lock().unwrap().is_joined {
+        let yt_link = String::from("https://live4ro.antenaplay.ro/radiozu/radiozu-48000.m3u8");
+
+        let guild_id = msg.guild_id.unwrap();
+
+        if let Ok(song) = songbird::input::ffmpeg(yt_link).await {
+            let input = Input::from(song);
+
+            let content = format!(
+                "Playing **{:?}** by **{:?}**",
+                input
+                    .metadata
+                    .title
+                    .as_ref()
+                    .unwrap_or(&"<UNKNOWN>".to_string()),
+                input
+                    .metadata
+                    .artist
+                    .as_ref()
+                    .unwrap_or(&"<UNKNOWN>".to_string()),
+            );
+
+            state
+                .http
+                .create_message(msg.channel_id)
+                .content(&content)?
+                .exec()
+                .await?;
+
+            if let Some(call_lock) = state.songbird.get(guild_id.get()) {
+                let mut call = call_lock.lock().await;
+                let handle = call.play_source(input);
+
+                let mut store = state.trackdata.write().await;
+                store.insert(guild_id, handle);
+            }
+        } else {
+            state
+                .http
+                .create_message(msg.channel_id)
+                .content("Didn't find any results")?
+                .exec()
+                .await?;
+        }
+    }
+    Ok(())
+}
+
+async fn radiovirgin(
+    msg: Message,
+    state: State,
+    state_info: Arc<Mutex<StateInfo>>,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    if !state_info.lock().unwrap().is_joined {
+        let res = join(msg.clone(), state.clone(), state_info.clone())
+            .await
+            .ok();
+
+        match res {
+            Some(result) => println!("{:?}", result),
+            None => println!("ERR"),
+        }
+    }
+    if state_info.lock().unwrap().is_joined {
+        let yt_link = String::from("http://astreaming.virginradio.ro:8000/virgin_aacp_64k");
+
+        let guild_id = msg.guild_id.unwrap();
+
+        if let Ok(song) = songbird::input::ffmpeg(yt_link).await {
+            let input = Input::from(song);
+
+            let content = format!(
+                "Playing **{:?}** by **{:?}**",
+                input
+                    .metadata
+                    .title
+                    .as_ref()
+                    .unwrap_or(&"<UNKNOWN>".to_string()),
+                input
+                    .metadata
+                    .artist
+                    .as_ref()
+                    .unwrap_or(&"<UNKNOWN>".to_string()),
+            );
+
+            state
+                .http
+                .create_message(msg.channel_id)
+                .content(&content)?
+                .exec()
+                .await?;
+
+            if let Some(call_lock) = state.songbird.get(guild_id.get()) {
+                let mut call = call_lock.lock().await;
+                let handle = call.play_source(input);
+
+                let mut store = state.trackdata.write().await;
+                store.insert(guild_id, handle);
+            }
+        } else {
+            state
+                .http
+                .create_message(msg.channel_id)
+                .content("Didn't find any results")?
+                .exec()
+                .await?;
+        }
+    }
     Ok(())
 }
 

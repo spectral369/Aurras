@@ -54,10 +54,15 @@ impl StringUtils for str {
         self.substring(start, len)
     }
 }
-
+#[derive(Debug, Default)]
 pub struct YtInfo {
     _yt_link: String,
     yt_desc: String,
+    _yt_title: String,
+    _yt_length_sec: String,
+    _yt_thumbnail: String,
+    _yt_author: String,
+    _is_live: bool,
 }
 
 impl YtInfo {
@@ -74,7 +79,21 @@ impl YtInfo {
         self.yt_desc.clone()
     }
 }
-
+/* same as: #[derive(Default)]
+impl Default for YtInfo {
+    fn default() -> Self {
+        YtInfo {
+            _yt_link: String::default(),
+            yt_desc: String::default(),
+            yt_title: String::default(),
+            yt_length_sec: String::default(),
+            yt_thumbnail: String::default(),
+            yt_author: String::default(),
+            is_live: bool::default(),
+        }
+    }
+}
+*/
 pub fn extract_links(content: &str) -> LinkedHashSet<Cow<str>> {
     //pub fn extract_links(content: &str) -> YtInfo {
     // let mut fileRef = std::fs::File::create("saved.txt").expect("create failed");
@@ -108,13 +127,84 @@ pub fn extract_links(content: &str) -> LinkedHashSet<Cow<str>> {
     links
 }
 
-pub fn get_link_content(content: &str) -> YtInfo {
+pub fn get_link_content(content: &str, yt_link: String) -> YtInfo {
+    // let mut fileRef = std::fs::File::create("saved.txt").expect("create failed");
+    // std::io::Write::write_all(&mut fileRef, &content.as_bytes()).expect("write failed");
     lazy_static! {
         static ref YT_DESC_REGEX: Regex =
             Regex::new("(shortDescription\":\"(.*?)\"([^\"]*)\")").unwrap();
+        static ref YT_TITLE_REGEX: Regex = Regex::new("(title\":\"(.*?)\"([^\"]*)\")").unwrap();
+        static ref YT_LENGTH_SEC: Regex =
+            Regex::new("(lengthSeconds\":\"(.*?)\"([^\"]*)\")").unwrap();
+        static ref YT_THUMBNAIL: Regex =
+            Regex::new("(thumbnails\":\\[\\{\"url\":\"(.*?)\"([^\"]*)\")").unwrap();
+        static ref YT_AUTHOR: Regex = Regex::new("(author\":\"(.*?)\"([^\"]*)\")").unwrap();
+        static ref YT_IS_LIVE: Regex = Regex::new("(isLiveContent\":+(\\w+))").unwrap();
     }
 
+    /*for cap in YT_THUMBNAIL.captures(&content) {
+        println!("2: {} 3: {} 1: {} ", &cap[2], &cap[3], &cap[1]);
+    }*/
+
     let yt_desc: String = YT_DESC_REGEX
+        .captures_iter(&content.to_string())
+        .take(1)
+        .map(|c| match c.get(2) {
+            Some(val) => Cow::from(val.as_str().to_string()),
+            _ => unreachable!(),
+        })
+        .collect();
+
+    //   println!("{:?}", yt_desc);
+
+    let yt_title: String = YT_TITLE_REGEX
+        .captures_iter(&content.to_string())
+        .take(1)
+        .map(|c| match c.get(2) {
+            Some(val) => Cow::from(val.as_str().to_string()),
+            _ => unreachable!(),
+        })
+        .collect();
+
+    println!(" -> {:?}", yt_title);
+
+    let yt_len_sec: String = YT_LENGTH_SEC
+        .captures_iter(&content.to_string())
+        .take(1)
+        .map(|c| match c.get(2) {
+            Some(val) => Cow::from(val.as_str().to_string()),
+            _ => unreachable!(),
+        })
+        .collect();
+
+    println!("{:?}", yt_len_sec);
+
+    let mut yt_thumbnail: String = YT_THUMBNAIL
+        .captures_iter(&content.to_string())
+        .take(1)
+        .map(|c| match c.get(2) {
+            Some(val) => Cow::from(val.as_str().to_string()),
+            _ => unreachable!(),
+        })
+        .collect();
+    let index_element = yt_thumbnail
+        .chars()
+        .position(|x| x == '?')
+        .unwrap_or(yt_thumbnail.chars().count());
+    yt_thumbnail = yt_thumbnail.chars().take(index_element).collect();
+    println!("{:?}", yt_thumbnail);
+
+    let yt_author: String = YT_AUTHOR
+        .captures_iter(&content.to_string())
+        .take(1)
+        .map(|c| match c.get(2) {
+            Some(val) => Cow::from(val.as_str().to_string()),
+            _ => unreachable!(),
+        })
+        .collect();
+
+    println!("{:?}", yt_author);
+    let yt_is_live: String = YT_IS_LIVE
         .captures_iter(&content.to_string())
         .take(3)
         .map(|c| match c.get(2) {
@@ -124,8 +214,13 @@ pub fn get_link_content(content: &str) -> YtInfo {
         .collect();
 
     let yt_info_con = YtInfo {
-        _yt_link: String::default(),
+        _yt_link: yt_link,
         yt_desc: String::from(yt_desc),
+        _yt_title: String::from(yt_title),
+        _yt_length_sec: String::from(yt_len_sec),
+        _yt_thumbnail: String::from(yt_thumbnail),
+        _yt_author: String::from(yt_author),
+        _is_live: yt_is_live.parse().unwrap(),
     };
     yt_info_con
 }

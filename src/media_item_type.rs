@@ -1,0 +1,4 @@
+enum MediaItemType {
+    Radio,
+    Youtube,
+}
