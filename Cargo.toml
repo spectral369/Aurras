@@ -10,33 +10,42 @@ repository = "https://github.com/spectral369/aurras-bot/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-twilight-model = "0.11.0"
-twilight-gateway = {version="0.11.0", default-features = false, features=["zlib-simd", "native"]}
-twilight-cache-inmemory = "0.11.0"
-twilight-util = {version="0.11.0", features = ["link","builder"]}
-twilight-embed-builder = "0.11.0"
-twilight-validate = "0.11.0"
-twilight-http = {version="0.11.0", features=["native"]}
+twilight-model = "0.12.2"
+twilight-gateway = {version="0.12.1", default-features = false, features=["zlib-simd", "native"]}
+twilight-cache-inmemory = "0.12.1"
+twilight-util = {version="0.12.1", features = ["link","builder"]}
+twilight-embed-builder = "0.11.1"
+twilight-validate = "0.12.1"
+twilight-http = {version="0.12.1", features=["native"]}
 twilight-command-parser = "0.9.0"
-twilight-standby = "0.11.0"
+twilight-standby = "0.12.1"
 futures = "0.3.21"
-tokio = { version = "1.19.2", features = ["full"] }
+tokio = { version = "1.20.1", features = ["full"] }
 # songbird = { git = "https://github.com/serenity-rs/songbird", branch = "next", default-features = false, features = ["twilight-rustls", "zlib-simd", "driver"] }
-reqwest = { version = "0.11.10", features = ["json"] }
+reqwest = { version = "0.11.11", features = ["json"] }
 lazy-static-include = "3.1.2"
-regex = "1.5.6"
+regex = "1.6.0"
 linked_hash_set = "0.1.4"
+async-trait = "0.1.56"
 
 [dependencies.songbird]
 default-features = false
 git = "https://github.com/serenity-rs/songbird.git"
 branch = "next"
-features = [ "yt-dlp"
-           , "twilight-rustls"
+features = [
+            #"yt-dlp", 
+            "twilight-rustls"
            , "zlib-simd"
            , "driver"
            , "gateway"
            ]
+
+
+[dependencies.symphonia]
+version = "0.5"
+features = ["aac", "mp3", "isomp4", "alac"]
+git = "https://github.com/FelixMcFelix/Symphonia"
+branch = "songbird-fixes"
 
 [profile.release]
 lto = true

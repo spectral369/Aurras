@@ -94,7 +94,7 @@ impl Default for YtInfo {
     }
 }
 */
-pub fn extract_links(content: &str) -> LinkedHashSet<Cow<str>> {
+pub fn _extract_links(content: &str) -> LinkedHashSet<Cow<str>> {
     //pub fn extract_links(content: &str) -> YtInfo {
     // let mut fileRef = std::fs::File::create("saved.txt").expect("create failed");
     //std::io::Write::write_all(&mut fileRef, &content.as_bytes()).expect("write failed");
