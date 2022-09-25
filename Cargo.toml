@@ -1,8 +1,8 @@
 [package]
 name = "aurras"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
-authors = ["spectral369 <spectral369@freelancingpeter.eu>"] 
+authors = ["spectral369 <spectral369@freelancingpeter.eu>"]
 description = "Discord Music Bot written in RUST"
 homepage = "freelancingpeter.eu"
 repository = "https://github.com/spectral369/aurras-bot/"
@@ -10,18 +10,19 @@ repository = "https://github.com/spectral369/aurras-bot/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-twilight-model = "0.12.2"
-twilight-gateway = {version="0.12.1", default-features = false, features=["zlib-simd", "native"]}
-twilight-cache-inmemory = "0.12.1"
-twilight-util = {version="0.12.1", features = ["link","builder"]}
-twilight-embed-builder = "0.11.1"
-twilight-validate = "0.12.1"
-twilight-http = {version="0.12.1", features=["native"]}
-twilight-command-parser = "0.9.0"
-twilight-standby = "0.12.1"
-futures = "0.3.21"
-tokio = { version = "1.20.1", features = ["full"] }
-# songbird = { git = "https://github.com/serenity-rs/songbird", branch = "next", default-features = false, features = ["twilight-rustls", "zlib-simd", "driver"] }
+twilight-model = "0.13.4"
+twilight-gateway = { version = "0.13.2", default-features = false, features = [
+    "zlib-simd",
+    "native",
+] }
+twilight-cache-inmemory = "0.13.0"
+twilight-util = { version = "0.13.2", features = ["link", "builder"] }
+twilight-validate ="0.13.1"
+twilight-http = { version = "0.13.1", features = ["native"] }
+twilight-standby = "0.13.1"
+futures = "0.3.24"
+tokio = { version = "1.21.1", features = ["full"] }
+#songbird = { git = "https://github.com/serenity-rs/songbird",version = "0.3.0", default-features = false, features = ["rustls", "zlib-simd", "driver", "twilight", "gateway", "yt-dlp"] }
 reqwest = { version = "0.11.11", features = ["json"] }
 lazy-static-include = "3.1.2"
 regex = "1.6.0"
@@ -32,17 +33,11 @@ async-trait = "0.1.56"
 default-features = false
 git = "https://github.com/serenity-rs/songbird.git"
 branch = "next"
-features = [
-            #"yt-dlp", 
-            "twilight-rustls"
-           , "zlib-simd"
-           , "driver"
-           , "gateway"
-           ]
+features = [ "rustls",  "driver", "gateway", "twilight", "builtin-queue"]
 
 
 [dependencies.symphonia]
-version = "0.5"
+version = "0.5.1"
 features = ["aac", "mp3", "isomp4", "alac"]
 git = "https://github.com/FelixMcFelix/Symphonia"
 branch = "songbird-fixes"

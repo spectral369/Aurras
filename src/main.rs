@@ -6,6 +6,7 @@ use songbird::{
     tracks::{PlayMode, TrackHandle, TrackState},
     EventContext, EventHandler, Songbird,
 };
+
 use std::{
     collections::HashMap,
     env,
@@ -13,11 +14,16 @@ use std::{
     fs::{File, OpenOptions},
     future::Future,
     path::Path,
-    process::{self},
+    process::{self, Stdio},
     sync::Arc,
     time::Duration,
 };
 use std::{fs::read_to_string, io::prelude::*};
+use twilight_gateway::{Cluster, Event, Intents};
+use twilight_model::{
+    channel::Message,
+    id::{marker::GuildMarker, Id},
+};
 
 use std::io::{BufRead, BufReader};
 use tokio::sync::{Mutex, RwLock};
@@ -25,13 +31,8 @@ use tokio::sync::{Mutex, RwLock};
 use std::process::Command;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 
-use twilight_gateway::{Cluster, Event, Intents};
 use twilight_http::Client as HttpClient;
-use twilight_model::{
-    channel::Message,
-    gateway::payload::incoming::MessageCreate,
-    id::{marker::GuildMarker, Id},
-};
+
 use twilight_standby::Standby;
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder};
 
@@ -55,8 +56,9 @@ struct Queue1 {
 #[async_trait]
 impl EventHandler for Queue1 {
     async fn act(&self, _ctx: &EventContext<'_>) -> Option<songbird::Event> {
-        // let mut src =  self.queue[0].clone();
-
+        if !self.queue.is_empty() {
+            let mut _src = self.queue[0].clone();
+        }
         println!("song finished ");
         return None;
     }
@@ -64,8 +66,8 @@ impl EventHandler for Queue1 {
 
 impl Queue1 {
     pub fn remove_fist(&mut self) {
-        if self.queue.len()>0{
-        self.queue.remove(0);
+        if self.queue.len() > 0 {
+            self.queue.remove(0);
         }
     }
 }
@@ -122,7 +124,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             | Intents::GUILDS
             | Intents::GUILD_VOICE_STATES
             | Intents::MESSAGE_CONTENT;
-        let (cluster, events) = Cluster::builder(token, intents).build().await?;
+
+        let (cluster, events) = Cluster::new(token, intents).await?;
 
         let thi = tokio::spawn(async move {
             cluster.up().await;
@@ -311,7 +314,6 @@ async fn play(
     }
     if state_info.lock().await.is_joined {
         let b = msg.content.clone();
-        // println!("{}", b);
         let index1 = b.find(" ");
         let mut text: String;
         if !index1.is_none() {
@@ -355,7 +357,7 @@ async fn play(
         que1.remove_fist();
 
         //   let queue_list = &queue.lock().await.queue;
-        let mut src: YoutubeDl;
+        let mut src;
         if !queue_list.is_empty() {
             src = queue_list[0].clone();
         } else {
@@ -480,49 +482,48 @@ async fn volume(
     state: State,
     _state_info: Arc<Mutex<StateInfo>>,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-    state
-        .http
-        .create_message(msg.channel_id)
-        .content("What's the volume you want to set (0.0-10.0, 1.0 being the default)?")?
-        .exec()
-        .await?;
-
-    let author_id = msg.author.id;
-    let msg = state
-        .standby
-        .wait_for_message(msg.channel_id, move |new_msg: &MessageCreate| {
-            new_msg.author.id == author_id
-        })
-        .await?;
     let guild_id = msg.guild_id.unwrap();
-    let volume = msg.content.parse::<f64>()?;
+    let mut content = msg.content.clone();
+    content = content[7..].to_string().to_string();
+    content.retain(|f| !f.is_whitespace());
 
-    if !volume.is_finite() || volume > 10.0 || volume < 0.0 {
+    if content.to_string().is_empty() {
         state
             .http
             .create_message(msg.channel_id)
-            .content("Invalid volume!")?
+            .content("Use !volume <value>")?
             .exec()
             .await?;
-
-        return Ok(());
-    }
-
-    let store = state.trackdata.read().await;
-
-    let content = if let Some(handle) = store.get(&guild_id) {
-        let _success = handle.set_volume(volume as f32);
-        format!("Set the volume to {}", volume)
     } else {
-        format!("No track to change volume!")
-    };
+        let volume = content.parse::<f32>()?;
 
-    state
-        .http
-        .create_message(msg.channel_id)
-        .content(&content)?
-        .exec()
-        .await?;
+        if !volume.is_finite() || volume > 10.0 || volume < 0.0 {
+            state
+                .http
+                .create_message(msg.channel_id)
+                .content("Invalid volume!")?
+                .exec()
+                .await?;
+
+            return Ok(());
+        }
+
+        let store = state.trackdata.read().await;
+
+        let content = if let Some(handle) = store.get(&guild_id) {
+            let _success = handle.set_volume(volume as f32);
+            format!("Set the volume to {}", volume)
+        } else {
+            format!("No track to change volume!")
+        };
+
+        state
+            .http
+            .create_message(msg.channel_id)
+            .content(&content)?
+            .exec()
+            .await?;
+    }
 
     Ok(())
 }
@@ -790,8 +791,6 @@ async fn description(
                 let re3 = Regex::new(r"\n\n").unwrap();
                 let result3 = re3.replace_all(&result2, "\n");
                 let result_final: String = result3.chars().take(1999).collect();
-
-                // println!("{:?}", &result_final);
                 state
                     .http
                     .create_message(msg.channel_id)
@@ -828,18 +827,37 @@ async fn radiozu(
         }
     }
     if state_info.lock().await.is_joined {
-        let mut a = Command::new("ffmpeg -i https://live4ro.antenaplay.ro/radiozu/radiozu-48000.m3u8 -f wav -ac 2 -acodec pcm_s16le -ar 48000 -");
-        /*let a  =   Command::new("ffmpeg").arg("-i").arg("https://live4ro.antenaplay.ro/radiozu/radiozu-48000.m3u8")
-        .arg("-f").arg("wav").arg("-ac").arg("2").arg("-acodec").arg("pcm_s16le").arg("-ar").arg("48000").arg("-");*/
-
-        let b = a.spawn().unwrap();
-        println!("{:?}", &b);
-
-        let test: Input = ChildContainer::from(b).into();
-
-        // let yt_link = String::from("https://live4ro.antenaplay.ro/radiozu/radiozu-48000.m3u8");
-
+        let a = Command::new("ffmpeg")
+            .arg("-i")
+            .arg("https://live4ro.antenaplay.ro/radiozu/radiozu-48000.m3u8")
+            .arg("-f")
+            .arg("wav")
+            .arg("-ac")
+            .arg("2")
+            .arg("-acodec")
+            .arg("pcm_s16le")
+            .arg("-ar")
+            .arg("48000")
+            .arg("-")
+            .stdout(Stdio::piped())
+            .spawn();
+        let test: Input = ChildContainer::from(a.unwrap()).into();
         let guild_id = msg.guild_id.unwrap();
+        let mut embed_builder = EmbedBuilder::new();
+        embed_builder = embed_builder.title("RadioZU Romania");
+        let name = EmbedFieldBuilder::new("Requestor", msg.author.name)
+        .inline()
+        .build();
+    embed_builder = embed_builder.field(name);
+
+    let embed = embed_builder.validate()?.build();
+
+    state
+        .http
+        .create_message(msg.channel_id)
+        .embeds(&[embed])?
+        .exec()
+        .await?;
         if let Some(call_lock) = state.songbird.get(guild_id) {
             let mut call = call_lock.lock().await;
             let handle = call.play_input(test);
@@ -848,6 +866,7 @@ async fn radiozu(
             store.insert(guild_id, handle);
         }
     }
+
     Ok(())
 }
 
@@ -867,42 +886,50 @@ async fn radiovirgin(
         }
     }
     if state_info.lock().await.is_joined {
-        let yt_link = String::from("http://astreaming.virginradio.ro:8000/virgin_aacp_64k");
-
+      
+        let a = Command::new("ffmpeg")
+            .arg("-i")
+            .arg("https://astreaming.edi.ro:8443/VirginRadio_aac")
+            .arg("-f")
+            .arg("wav")
+            .arg("-ac")
+            .arg("2")
+            .arg("-acodec")
+            .arg("pcm_s16le")
+            .arg("-ar")
+            .arg("48000")
+            .arg("-")
+            .stdout(Stdio::piped())
+            .spawn();
+        let test: Input = ChildContainer::from(a.unwrap()).into();
         let guild_id = msg.guild_id.unwrap();
 
-        // if let Ok(song) = songbird::input::ffmpeg(yt_link).await {
-        let mut src = YoutubeDl::new(reqwest::Client::new(), yt_link);
-        if let Ok(metadata) = src.aux_metadata().await {
-            let content = format!(
-                "Playing **{:?}** by **{:?}**",
-                metadata.track.as_ref().unwrap_or(&"<UNKNOWN>".to_string()),
-                metadata.artist.as_ref().unwrap_or(&"<UNKNOWN>".to_string()),
-            );
+        let mut embed_builder = EmbedBuilder::new();
+        embed_builder = embed_builder.title("Radio Virgin Romania");
 
-            state
-                .http
-                .create_message(msg.channel_id)
-                .content(&content)?
-                .exec()
-                .await?;
+        let name = EmbedFieldBuilder::new("Requestor", msg.author.name)
+            .inline()
+            .build();
+        embed_builder = embed_builder.field(name);
 
-            if let Some(call_lock) = state.songbird.get(guild_id) {
-                let mut call = call_lock.lock().await;
-                let handle = call.play_input(src.into());
+        let embed = embed_builder.validate()?.build();
 
-                let mut store = state.trackdata.write().await;
-                store.insert(guild_id, handle);
-            }
-        } else {
-            state
-                .http
-                .create_message(msg.channel_id)
-                .content("Didn't find any results")?
-                .exec()
-                .await?;
+        state
+            .http
+            .create_message(msg.channel_id)
+            .embeds(&[embed])?
+            .exec()
+            .await?;
+
+        if let Some(call_lock) = state.songbird.get(guild_id) {
+            let mut call = call_lock.lock().await;
+            let handle = call.play_input(test);
+
+            let mut store = state.trackdata.write().await;
+            store.insert(guild_id, handle);
         }
     }
+
     Ok(())
 }
 
