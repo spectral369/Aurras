@@ -34,7 +34,8 @@ use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_http::Client as HttpClient;
 
 use twilight_standby::Standby;
-use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder};
+use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder,ImageSource};
+use std::time::Instant;
 
 mod yt_utils;
 
@@ -302,6 +303,7 @@ async fn play(
     state_info: Arc<Mutex<StateInfo>>,
     queue: Arc<Mutex<Queue1>>,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    let now = Instant::now();
     if !state_info.lock().await.is_joined {
         let res = join(msg.clone(), state.clone(), state_info.clone())
             .await
@@ -411,7 +413,8 @@ async fn play(
                 .await?;
         }
     }
-
+    let elapsed = now.elapsed();
+    println!("Elapsed Youtube: {:.2?}", elapsed);
     Ok(())
 }
 
@@ -845,6 +848,7 @@ async fn radiozu(
         let guild_id = msg.guild_id.unwrap();
         let mut embed_builder = EmbedBuilder::new();
         embed_builder = embed_builder.title("RadioZU Romania");
+        embed_builder =  embed_builder.image(ImageSource::attachment("https://static.tuneyou.com/images/logos/500_500/33/3133/RadioZU.jpg")?);
         let name = EmbedFieldBuilder::new("Requestor", msg.author.name)
         .inline()
         .build();
@@ -875,6 +879,7 @@ async fn radiovirgin(
     state: State,
     state_info: Arc<Mutex<StateInfo>>,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    let now = Instant::now();
     if !state_info.lock().await.is_joined {
         let res = join(msg.clone(), state.clone(), state_info.clone())
             .await
@@ -908,9 +913,10 @@ async fn radiovirgin(
         embed_builder = embed_builder.title("Radio Virgin Romania");
 
         let name = EmbedFieldBuilder::new("Requestor", msg.author.name)
-            .inline()
+            .inline()   
             .build();
         embed_builder = embed_builder.field(name);
+        embed_builder =  embed_builder.image(ImageSource::attachment("https://virginradio.ro/wp-content/uploads/2019/06/VR_ROMANIA_WHITE-STAR-LOGO_RGB_ONLINE_1600x1600.png")?);
 
         let embed = embed_builder.validate()?.build();
 
@@ -928,6 +934,8 @@ async fn radiovirgin(
             let mut store = state.trackdata.write().await;
             store.insert(guild_id, handle);
         }
+        let elapsed = now.elapsed();
+        println!("Elapsed Radio: {:.2?}", elapsed);
     }
 
     Ok(())
