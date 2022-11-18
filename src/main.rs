@@ -19,9 +19,15 @@ use std::{
     time::Duration,
 };
 use std::{fs::read_to_string, io::prelude::*};
-use twilight_gateway::{Cluster, Event, Intents};
+use twilight_gateway::{
+    cluster::{ClusterBuilder, ShardScheme}, Event, Intents,
+};
 use twilight_model::{
     channel::Message,
+    gateway::{
+        payload::outgoing::{update_presence::UpdatePresencePayload},
+        presence::{Activity, ActivityType,  Status},
+    },
     id::{marker::GuildMarker, Id},
 };
 
@@ -33,9 +39,9 @@ use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 
 use twilight_http::Client as HttpClient;
 
-use twilight_standby::Standby;
-use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder,ImageSource};
 use std::time::Instant;
+use twilight_standby::Standby;
+use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
 mod yt_utils;
 
@@ -79,6 +85,7 @@ struct StateInfo {
     current_song_link: String,
     _yt_utils: yt_utils::YtInfo,
     current_song_length: Option<Duration>,
+    is_playing: bool,
 }
 
 impl StateInfo {
@@ -93,6 +100,9 @@ impl StateInfo {
     }
     pub fn set_current_song_length(&mut self, value: Option<Duration>) {
         self.current_song_length = value;
+    }
+    pub fn set_is_playing(&mut self, value: bool) {
+        self.is_playing = value;
     }
 }
 
@@ -126,12 +136,55 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             | Intents::GUILD_VOICE_STATES
             | Intents::MESSAGE_CONTENT;
 
-        let (cluster, events) = Cluster::new(token, intents).await?;
+        /*let (cluster, events) = Cluster::new(token, intents).await?;
+
+        let cluster1 = Arc::new(cluster);
+        let cluster2 = cluster1.clone();
+
+        let thi = tokio::spawn(async move {
+            cluster1.up().await;
+            return Songbird::twilight(cluster1.clone(), user_id);
+        });*/
+        let cluster_id = 0;
+        let clusters = 1;
+        let shards_per_cluster = 1;
+
+        let (cluster, events) = ClusterBuilder::new(token, intents)
+            .shard_scheme(ShardScheme::try_from((
+                (cluster_id * shards_per_cluster..(cluster_id + 1) * shards_per_cluster),
+                shards_per_cluster * clusters,
+            ))?)
+            .presence(UpdatePresencePayload {
+                activities: vec![Activity {
+                    application_id: None,
+                    assets: None,
+                    buttons: vec![],
+                    created_at: None,
+                    details: None,
+                    emoji: None,
+                    flags: None,
+                    id: None,
+                    instance: None,
+                    kind: ActivityType::Playing,
+                    name: "RUST BOT DEMO".to_string(),
+                    party: None,
+                    secrets: None,
+                    state: None,
+                    timestamps: None,
+                    url: None,
+                }],
+                afk: false,
+                since: None,
+                status: Status::Online,
+            })
+            .build()
+            .await?;
 
         let thi = tokio::spawn(async move {
             cluster.up().await;
             return Songbird::twilight(Arc::new(cluster), user_id);
         });
+
         let songbird = thi.await?;
         (
             events,
@@ -139,7 +192,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 http,
                 trackdata: Default::default(),
                 songbird,
-
                 standby: Standby::new(),
                 cache: InMemoryCache::builder()
                     .resource_types(ResourceType::VOICE_STATE | ResourceType::GUILD)
@@ -151,6 +203,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 current_song_link: String::default(),
                 _yt_utils: Default::default(),
                 current_song_length: Option::default(),
+                is_playing: false,
             })),
             Arc::new(Mutex::new(Queue1 {
                 queue: Vec::default(),
@@ -158,7 +211,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         )
     };
 
-    while let Some((_, event)) = events.next().await {
+    while let Some((_, event)) = events.next().await { //id
         state.standby.process(&event);
         state.cache.update(&event);
         state.songbird.process(&event).await;
@@ -351,6 +404,7 @@ async fn play(
                 .await
                 .set_current_song_link(yt_link.clone());
         }
+        //check if it's playing
 
         let guild_id = msg.guild_id.unwrap();
 
@@ -385,8 +439,15 @@ async fn play(
                 .await?;
 
             if let Some(call_lock) = state.songbird.get(guild_id) {
+                if state_info.lock().await.is_playing {
+                    let mut call = call_lock.lock().await;
+                    let _ = call.stop();
+                    state_info.lock().await.set_is_playing(false);
+                }
+
                 let mut call = call_lock.lock().await;
                 let handle = call.play_input(src.into());
+                state_info.lock().await.set_is_playing(true);
 
                 let mut store = state.trackdata.write().await;
                 store.insert(guild_id, handle);
@@ -461,13 +522,14 @@ async fn pause(
 async fn stop(
     msg: Message,
     state: State,
-    _state_info: Arc<Mutex<StateInfo>>,
+    state_info: Arc<Mutex<StateInfo>>,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let guild_id = msg.guild_id.unwrap();
 
     if let Some(call_lock) = state.songbird.get(guild_id.into_nonzero()) {
         let mut call = call_lock.lock().await;
         let _ = call.stop();
+        state_info.lock().await.set_is_playing(false);
     }
 
     state
@@ -846,25 +908,33 @@ async fn radiozu(
             .spawn();
         let test: Input = ChildContainer::from(a.unwrap()).into();
         let guild_id = msg.guild_id.unwrap();
-        let mut embed_builder = EmbedBuilder::new();
-        embed_builder = embed_builder.title("RadioZU Romania");
-        embed_builder =  embed_builder.image(ImageSource::attachment("https://static.tuneyou.com/images/logos/500_500/33/3133/RadioZU.jpg")?);
-        let name = EmbedFieldBuilder::new("Requestor", msg.author.name)
-        .inline()
-        .build();
-    embed_builder = embed_builder.field(name);
+        let source = ImageSource::url(
+            "https://static.tuneyou.com/images/logos/500_500/33/3133/RadioZU.jpg",
+        )?;
 
-    let embed = embed_builder.validate()?.build();
+        let embed = EmbedBuilder::new()
+            .title("RadioZU Romania")
+            .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
+            .image(source)
+            .validate()?
+            .build();
 
-    state
-        .http
-        .create_message(msg.channel_id)
-        .embeds(&[embed])?
-        .exec()
-        .await?;
+        state
+            .http
+            .create_message(msg.channel_id)
+            .embeds(&[embed])?
+            .exec()
+            .await?;
         if let Some(call_lock) = state.songbird.get(guild_id) {
+            if state_info.lock().await.is_playing {
+                let mut call = call_lock.lock().await;
+                let _ = call.stop();
+                state_info.lock().await.set_is_playing(false);
+            }
+
             let mut call = call_lock.lock().await;
             let handle = call.play_input(test);
+            state_info.lock().await.set_is_playing(true);
 
             let mut store = state.trackdata.write().await;
             store.insert(guild_id, handle);
@@ -891,7 +961,6 @@ async fn radiovirgin(
         }
     }
     if state_info.lock().await.is_joined {
-      
         let a = Command::new("ffmpeg")
             .arg("-i")
             .arg("https://astreaming.edi.ro:8443/VirginRadio_aac")
@@ -909,16 +978,15 @@ async fn radiovirgin(
         let test: Input = ChildContainer::from(a.unwrap()).into();
         let guild_id = msg.guild_id.unwrap();
 
-        let mut embed_builder = EmbedBuilder::new();
-        embed_builder = embed_builder.title("Radio Virgin Romania");
-
-        let name = EmbedFieldBuilder::new("Requestor", msg.author.name)
-            .inline()   
+        let source = ImageSource::url(
+            "https://virginradio.ro/wp-content/uploads/2019/06/VR_ROMANIA_WHITE-STAR-LOGO_RGB_ONLINE_1600x1600.png",
+        )?;
+        let embed = EmbedBuilder::new()
+            .title("RadioZU Romania")
+            .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
+            .image(source)
+            .validate()?
             .build();
-        embed_builder = embed_builder.field(name);
-        embed_builder =  embed_builder.image(ImageSource::attachment("https://virginradio.ro/wp-content/uploads/2019/06/VR_ROMANIA_WHITE-STAR-LOGO_RGB_ONLINE_1600x1600.png")?);
-
-        let embed = embed_builder.validate()?.build();
 
         state
             .http
@@ -928,12 +996,45 @@ async fn radiovirgin(
             .await?;
 
         if let Some(call_lock) = state.songbird.get(guild_id) {
+            if state_info.lock().await.is_playing {
+                let mut call = call_lock.lock().await;
+                let _ = call.stop();
+                state_info.lock().await.set_is_playing(false);
+            }
+
             let mut call = call_lock.lock().await;
             let handle = call.play_input(test);
+            state_info.lock().await.set_is_playing(true);
+
+            /* let activity = Activity::from(MinimalActivity {
+                kind: ActivityType::Custom,
+                name: "Playing Virgin Radio Romania".to_owned(),
+                url: None,
+            });
+            let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+            // Send the request over the shard.
+            // let _rest = state.cluster.command(2, &request).await;
+            //  let shard_id =  state.cluster.shards().next().take().unwrap().info().unwrap().id();
+            let shard_id = state
+                .cluster
+                .shards()
+                .enumerate()
+                .next()
+                .unwrap()
+                .1
+                .info()
+                .unwrap()
+                .id();
+            println!("{:?}", shard_id);
+            let _rest = state.cluster.command(1, &request).await;
+            // println!("Next line is the shit");
+            println!("{:?}", _rest);*/
 
             let mut store = state.trackdata.write().await;
             store.insert(guild_id, handle);
         }
+
         let elapsed = now.elapsed();
         println!("Elapsed Radio: {:.2?}", elapsed);
     }
@@ -947,9 +1048,10 @@ fn get_discord_token() -> String {
         return_string = read_to_string("token.txt").expect("Unable to open file");
     } else {
         let mut file1 = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
+            // .create(true)
+            // .write(true)
+            // .append(true)
+            .read(true)
             .open("token.txt")
             .unwrap();
         file1
