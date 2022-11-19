@@ -9,24 +9,23 @@ use songbird::{
 
 use std::{
     collections::HashMap,
-    env,
     error::Error,
-    fs::{File, OpenOptions},
+    fs::{File, OpenOptions, self},
     future::Future,
-    path::Path,
     process::{self, Stdio},
     sync::Arc,
     time::Duration,
 };
 use std::{fs::read_to_string, io::prelude::*};
 use twilight_gateway::{
-    cluster::{ClusterBuilder, ShardScheme}, Event, Intents,
+    cluster::{ClusterBuilder, ShardScheme},
+    Event, Intents,
 };
 use twilight_model::{
     channel::Message,
     gateway::{
-        payload::outgoing::{update_presence::UpdatePresencePayload},
-        presence::{Activity, ActivityType,  Status},
+        payload::outgoing::update_presence::UpdatePresencePayload,
+        presence::{Activity, ActivityType, Status},
     },
     id::{marker::GuildMarker, Id},
 };
@@ -124,8 +123,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             println!("{:?} - {}", token, "Is not valid token !");
             process::exit(0x0100);
         }
-        env::set_var("DISCORD_TOKEN", token);
-        let token = env::var("DISCORD_TOKEN")?;
+        /*env::set_var("DISCORD_TOKEN", token);
+        let token = env::var("DISCORD_TOKEN")?;*/
         let http = HttpClient::new(token.clone());
         let user_id = http.current_user().exec().await?.model().await?.id;
 
@@ -211,7 +210,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         )
     };
 
-    while let Some((_, event)) = events.next().await { //id
+    while let Some((_, event)) = events.next().await {
+        //id
         state.standby.process(&event);
         state.cache.update(&event);
         state.songbird.process(&event).await;
@@ -232,6 +232,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                     Arc::clone(&queue),
                 )),
                 Some("!help") => spawn(help(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
+                Some("!radiolist") => spawn(radiolist(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
                 Some("!stop") => spawn(stop(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
                 Some("!time") => spawn(time(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
                 Some("!add") => spawn(add(
@@ -255,6 +256,26 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                     spawn(radiozu(msg.0, Arc::clone(&state), Arc::clone(&state_info)))
                 }
                 Some("!radiovirgin") => spawn(radiovirgin(
+                    msg.0,
+                    Arc::clone(&state),
+                    Arc::clone(&state_info),
+                )),
+                Some("!radiodeep") => spawn(radiodeep(
+                    msg.0,
+                    Arc::clone(&state),
+                    Arc::clone(&state_info),
+                )),
+                Some("!radiodeepfm") => spawn(radiodeepfm(
+                    msg.0,
+                    Arc::clone(&state),
+                    Arc::clone(&state_info),
+                )),
+                Some("!radiohouse") => spawn(radiohouse(
+                    msg.0,
+                    Arc::clone(&state),
+                    Arc::clone(&state_info),
+                )),
+                Some("!radiohousero") => spawn(radiohousero(
                     msg.0,
                     Arc::clone(&state),
                     Arc::clone(&state_info),
@@ -609,7 +630,9 @@ async fn help(
         }
     }
     if state_info.lock().await.is_joined {
-        let file = File::open("help.txt").expect("err");
+
+        let path =  fs::canonicalize("./help.txt");
+        let file = File::open(path.unwrap()).expect("err");
         let reader = BufReader::new(file);
 
         let mut embed_builder = EmbedBuilder::new();
@@ -635,6 +658,55 @@ async fn help(
 
     Ok(())
 }
+
+
+
+
+async fn radiolist(
+    msg: Message,
+    state: State,
+    state_info: Arc<Mutex<StateInfo>>,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    if !state_info.lock().await.is_joined {
+        let res = join(msg.clone(), state.clone(), state_info.clone())
+            .await
+            .ok();
+
+        match res {
+            Some(result) => println!("{:?}", result),
+            None => println!("ERR"),
+        }
+    }
+    if state_info.lock().await.is_joined {
+
+        let path =  fs::canonicalize("./radiolist.txt");
+        let file = File::open(path.unwrap()).expect("err");
+        let reader = BufReader::new(file);
+
+        let mut embed_builder = EmbedBuilder::new();
+        embed_builder = embed_builder.description("Radio List:");
+
+        for (index, line) in reader.lines().enumerate() {
+            let data = line.unwrap();
+
+            let f1 = EmbedFieldBuilder::new(String::from(index.to_string()), data)
+                .inline()
+                .build();
+            embed_builder = embed_builder.field(f1);
+        }
+
+        let embed = embed_builder.validate()?.build();
+        state
+            .http
+            .create_message(msg.channel_id)
+            .embeds(&[embed])?
+            .exec()
+            .await?;
+    }
+
+    Ok(())
+}
+
 
 async fn time(
     msg: Message,
@@ -944,6 +1016,278 @@ async fn radiozu(
     Ok(())
 }
 
+async fn radiodeep(
+    msg: Message,
+    state: State,
+    state_info: Arc<Mutex<StateInfo>>,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    if !state_info.lock().await.is_joined {
+        let res = join(msg.clone(), state.clone(), state_info.clone())
+            .await
+            .ok();
+
+        match res {
+            Some(result) => println!("{:?}", result),
+            None => println!("ERR"),
+        }
+    }
+    if state_info.lock().await.is_joined {
+        let a = Command::new("ffmpeg")
+            .arg("-i")
+            .arg("http://91.121.175.25:8000/mp3/stream")
+            .arg("-f")
+            .arg("wav")
+            .arg("-ac")
+            .arg("2")
+            .arg("-acodec")
+            .arg("pcm_s16le")
+            .arg("-ar")
+            .arg("48000")
+            .arg("-")
+            .stdout(Stdio::piped())
+            .spawn();
+        let test: Input = ChildContainer::from(a.unwrap()).into();
+        let guild_id = msg.guild_id.unwrap();
+        let source = ImageSource::url(
+            "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
+        )?;
+
+        let embed = EmbedBuilder::new()
+            .title("Radio Deep House Network")
+            .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
+            .image(source)
+            .validate()?
+            .build();
+
+        state
+            .http
+            .create_message(msg.channel_id)
+            .embeds(&[embed])?
+            .exec()
+            .await?;
+        if let Some(call_lock) = state.songbird.get(guild_id) {
+            if state_info.lock().await.is_playing {
+                let mut call = call_lock.lock().await;
+                let _ = call.stop();
+                state_info.lock().await.set_is_playing(false);
+            }
+
+            let mut call = call_lock.lock().await;
+            let handle = call.play_input(test);
+            state_info.lock().await.set_is_playing(true);
+
+            let mut store = state.trackdata.write().await;
+            store.insert(guild_id, handle);
+        }
+    }
+
+    Ok(())
+}
+
+async fn radiodeepfm(
+    msg: Message,
+    state: State,
+    state_info: Arc<Mutex<StateInfo>>,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    if !state_info.lock().await.is_joined {
+        let res = join(msg.clone(), state.clone(), state_info.clone())
+            .await
+            .ok();
+
+        match res {
+            Some(result) => println!("{:?}", result),
+            None => println!("ERR"),
+        }
+    }
+    if state_info.lock().await.is_joined {
+        let a = Command::new("ffmpeg")
+            .arg("-i")
+            .arg("https://hoth.alonhosting.com:4655/stream")
+            .arg("-f")
+            .arg("wav")
+            .arg("-ac")
+            .arg("2")
+            .arg("-acodec")
+            .arg("pcm_s16le")
+            .arg("-ar")
+            .arg("48000")
+            .arg("-")
+            .stdout(Stdio::piped())
+            .spawn();
+        let test: Input = ChildContainer::from(a.unwrap()).into();
+        let guild_id = msg.guild_id.unwrap();
+        let source = ImageSource::url(
+            "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
+        )?;
+
+        let embed = EmbedBuilder::new()
+            .title("Radio Deep House FM")
+            .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
+            .image(source)
+            .validate()?
+            .build();
+
+        state
+            .http
+            .create_message(msg.channel_id)
+            .embeds(&[embed])?
+            .exec()
+            .await?;
+        if let Some(call_lock) = state.songbird.get(guild_id) {
+            if state_info.lock().await.is_playing {
+                let mut call = call_lock.lock().await;
+                let _ = call.stop();
+                state_info.lock().await.set_is_playing(false);
+            }
+
+            let mut call = call_lock.lock().await;
+            let handle = call.play_input(test);
+            state_info.lock().await.set_is_playing(true);
+
+            let mut store = state.trackdata.write().await;
+            store.insert(guild_id, handle);
+        }
+    }
+
+    Ok(())
+}
+
+async fn radiohouse(
+    msg: Message,
+    state: State,
+    state_info: Arc<Mutex<StateInfo>>,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    if !state_info.lock().await.is_joined {
+        let res = join(msg.clone(), state.clone(), state_info.clone())
+            .await
+            .ok();
+
+        match res {
+            Some(result) => println!("{:?}", result),
+            None => println!("ERR"),
+        }
+    }
+    if state_info.lock().await.is_joined {
+        let a = Command::new("ffmpeg")
+            .arg("-i")
+            .arg("https://deephouseradio.radioca.st/deep?type=http&nocache=16")
+            .arg("-f")
+            .arg("wav")
+            .arg("-ac")
+            .arg("2")
+            .arg("-acodec")
+            .arg("pcm_s16le")
+            .arg("-ar")
+            .arg("48000")
+            .arg("-")
+            .stdout(Stdio::piped())
+            .spawn();
+        let test: Input = ChildContainer::from(a.unwrap()).into();
+        let guild_id = msg.guild_id.unwrap();
+        let source = ImageSource::url(
+            "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
+        )?;
+
+        let embed = EmbedBuilder::new()
+            .title("Radio House Santa Monica")
+            .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
+            .image(source)
+            .validate()?
+            .build();
+
+        state
+            .http
+            .create_message(msg.channel_id)
+            .embeds(&[embed])?
+            .exec()
+            .await?;
+        if let Some(call_lock) = state.songbird.get(guild_id) {
+            if state_info.lock().await.is_playing {
+                let mut call = call_lock.lock().await;
+                let _ = call.stop();
+                state_info.lock().await.set_is_playing(false);
+            }
+
+            let mut call = call_lock.lock().await;
+            let handle = call.play_input(test);
+            state_info.lock().await.set_is_playing(true);
+
+            let mut store = state.trackdata.write().await;
+            store.insert(guild_id, handle);
+        }
+    }
+
+    Ok(())
+}
+
+async fn radiohousero(
+    msg: Message,
+    state: State,
+    state_info: Arc<Mutex<StateInfo>>,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    if !state_info.lock().await.is_joined {
+        let res = join(msg.clone(), state.clone(), state_info.clone())
+            .await
+            .ok();
+
+        match res {
+            Some(result) => println!("{:?}", result),
+            None => println!("ERR"),
+        }
+    }
+    if state_info.lock().await.is_joined {
+        let a = Command::new("ffmpeg")
+            .arg("-i")
+            .arg("http://62.210.105.16:7000/;stream/1")
+            .arg("-f")
+            .arg("wav")
+            .arg("-ac")
+            .arg("2")
+            .arg("-acodec")
+            .arg("pcm_s16le")
+            .arg("-ar")
+            .arg("48000")
+            .arg("-")
+            .stdout(Stdio::piped())
+            .spawn();
+        let test: Input = ChildContainer::from(a.unwrap()).into();
+        let guild_id = msg.guild_id.unwrap();
+        let source = ImageSource::url(
+            "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
+        )?;
+
+        let embed = EmbedBuilder::new()
+            .title("Radio House RO")
+            .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
+            .image(source)
+            .validate()?
+            .build();
+
+        state
+            .http
+            .create_message(msg.channel_id)
+            .embeds(&[embed])?
+            .exec()
+            .await?;
+        if let Some(call_lock) = state.songbird.get(guild_id) {
+            if state_info.lock().await.is_playing {
+                let mut call = call_lock.lock().await;
+                let _ = call.stop();
+                state_info.lock().await.set_is_playing(false);
+            }
+
+            let mut call = call_lock.lock().await;
+            let handle = call.play_input(test);
+            state_info.lock().await.set_is_playing(true);
+
+            let mut store = state.trackdata.write().await;
+            store.insert(guild_id, handle);
+        }
+    }
+
+    Ok(())
+}
+
 async fn radiovirgin(
     msg: Message,
     state: State,
@@ -1044,15 +1388,16 @@ async fn radiovirgin(
 
 fn get_discord_token() -> String {
     let mut return_string: String = String::default();
-    if Path::new("token.txt").exists() {
-        return_string = read_to_string("token.txt").expect("Unable to open file");
+    let path =  fs::canonicalize("./token.txt").unwrap();
+    if path.exists() {
+        return_string = read_to_string(path).expect("Unable to open file");
     } else {
         let mut file1 = OpenOptions::new()
-            // .create(true)
-            // .write(true)
-            // .append(true)
+            .create(true)
+            .write(true)
+            .append(true)
             .read(true)
-            .open("token.txt")
+            .open(fs::canonicalize("./token.txt").unwrap())
             .unwrap();
         file1
             .write_all("<Insert discord token here>".as_bytes())

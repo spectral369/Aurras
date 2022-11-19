@@ -16,5 +16,9 @@
 `volume [0-100/nothing]` - Will set or get the current volume
 `repeat` - Toggle queue repeat mode
 `desc` - Show song description
-`radiozu` - Play Radio ZU(unavailable)
-`radiovirgin` -Play Virgin Radio Romania
+`radiozu` - Play Radio ZU
+`radiovirgin` - Play Virgin Radio Romania
+`radiodeep` - Play Radio Deep House Network
+`radiodeepfm` - Play Radio Deep House FM
+`radiohouse` - Play Radio House Santa Monica
+`radiohousero` - Play Radio House Romania
