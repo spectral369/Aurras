@@ -1,6 +1,7 @@
 `radiozu` - Play Radio ZU
 `radiovirgin` - Play Virgin Radio Romania
-`radiodeep` - Play Radio Deep House Network
-`radiodeepfm` - Play Radio Deep House FM
+`radio24house` - Play Radio 24 House
+`radioclubbers` - Play Radio Clubbers
+`radiouv` - Play Radio Undergound Vibe
+`radiodancefm` - Play Radio Dance FM Romania
 `radiohouse` - Play Radio House Santa Monica
-`radiohousero` - Play Radio House Romania

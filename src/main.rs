@@ -10,13 +10,14 @@ use songbird::{
 use std::{
     collections::HashMap,
     error::Error,
-    fs::{File, OpenOptions, self},
+    fs::{self, File, OpenOptions},
     future::Future,
     process::{self, Stdio},
     sync::Arc,
     time::Duration,
 };
 use std::{fs::read_to_string, io::prelude::*};
+use tokio::time::{self};
 use twilight_gateway::{
     cluster::{ClusterBuilder, ShardScheme},
     Event, Intents,
@@ -65,6 +66,7 @@ impl EventHandler for Queue1 {
         if !self.queue.is_empty() {
             let mut _src = self.queue[0].clone();
         }
+
         println!("song finished ");
         return None;
     }
@@ -123,10 +125,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             println!("{:?} - {}", token, "Is not valid token !");
             process::exit(0x0100);
         }
-        /*env::set_var("DISCORD_TOKEN", token);
-        let token = env::var("DISCORD_TOKEN")?;*/
         let http = HttpClient::new(token.clone());
-        let user_id = http.current_user().exec().await?.model().await?.id;
+        let user_id = http.current_user().await?.model().await?.id;
 
         let intents = Intents::GUILD_MESSAGES
             | Intents::DIRECT_MESSAGES
@@ -135,15 +135,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             | Intents::GUILD_VOICE_STATES
             | Intents::MESSAGE_CONTENT;
 
-        /*let (cluster, events) = Cluster::new(token, intents).await?;
-
-        let cluster1 = Arc::new(cluster);
-        let cluster2 = cluster1.clone();
-
-        let thi = tokio::spawn(async move {
-            cluster1.up().await;
-            return Songbird::twilight(cluster1.clone(), user_id);
-        });*/
         let cluster_id = 0;
         let clusters = 1;
         let shards_per_cluster = 1;
@@ -212,11 +203,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 
     while let Some((_, event)) = events.next().await {
         //id
+        // let ev = event.clone();
         state.standby.process(&event);
         state.cache.update(&event);
         state.songbird.process(&event).await;
 
         if let Event::MessageCreate(msg) = event {
+            let msg2 = msg.clone();
             if msg.guild_id.is_none() || !msg.content.starts_with('!') {
                 continue;
             }
@@ -232,7 +225,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                     Arc::clone(&queue),
                 )),
                 Some("!help") => spawn(help(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
-                Some("!radiolist") => spawn(radiolist(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
+                Some("!radiolist") => spawn(radiolist(
+                    msg.0,
+                    Arc::clone(&state),
+                    Arc::clone(&state_info),
+                )),
                 Some("!stop") => spawn(stop(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
                 Some("!time") => spawn(time(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
                 Some("!add") => spawn(add(
@@ -260,12 +257,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                     Arc::clone(&state),
                     Arc::clone(&state_info),
                 )),
-                Some("!radiodeep") => spawn(radiodeep(
+                Some("!radio24house") => spawn(radio24house(
                     msg.0,
                     Arc::clone(&state),
                     Arc::clone(&state_info),
                 )),
-                Some("!radiodeepfm") => spawn(radiodeepfm(
+                Some("!radioclubbers") => spawn(radioclubbers(
+                    msg.0,
+                    Arc::clone(&state),
+                    Arc::clone(&state_info),
+                )),
+                Some("!radiouv") => spawn(radiouv(
                     msg.0,
                     Arc::clone(&state),
                     Arc::clone(&state_info),
@@ -275,7 +277,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                     Arc::clone(&state),
                     Arc::clone(&state_info),
                 )),
-                Some("!radiohousero") => spawn(radiohousero(
+                Some("!radiodancefm") => spawn(radiodancefmro(
                     msg.0,
                     Arc::clone(&state),
                     Arc::clone(&state_info),
@@ -285,6 +287,59 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 }
                 Some("!repeat") => spawn(time(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
                 _ => continue,
+            }
+            if state_info.lock().await.is_joined {
+                let guild_id = msg2.guild_id.ok_or("No guild id")?;
+
+                let user_id = msg2.author.id;
+
+                let voice_id = state
+                    .cache
+                    .voice_state(user_id, guild_id.clone())
+                    .unwrap()
+                    .channel_id();
+
+                let u = state.clone();
+                let mut is_finished: bool = false;
+                let mut interval = time::interval(Duration::from_secs(25));
+                tokio::spawn(async move {
+                    let h = Arc::clone(&u);
+
+                    'mymainloop: loop {
+                        let j = Arc::clone(&h);
+
+                        tokio::spawn(async move {
+                            let nr_mem = j.cache.voice_channel_states(voice_id).unwrap().count();
+                            let bot_id: u64 = 920990750030848030;
+                            let mut mem_ids =
+                                j.cache.voice_channel_states(voice_id).unwrap().enumerate();
+
+                            let mut ids: Vec<u64> = Vec::new();
+
+                            let mut i = 0;
+                            'test: loop {
+                                let id1 = mem_ids.next().unwrap().1.user_id();
+                                //   println!("ID: {}", id1);
+                                ids.push(id1.get());
+                                i = i + 1;
+                                if i == nr_mem {
+                                    break 'test;
+                                }
+                            }
+
+                            //println!("no joined: {}", nr_mem);
+                            if nr_mem < 2 && ids.contains(&bot_id) {
+                                //   j.songbird.leave(guild_id).await;
+                                let _res = j.songbird.remove(guild_id).await;
+                                is_finished = true;
+                            }
+                        });
+                        if is_finished {
+                            break 'mymainloop;
+                        }
+                        interval.tick().await;
+                    }
+                });
             }
         }
     }
@@ -312,7 +367,6 @@ async fn join(
                 .http
                 .create_message(msg.channel_id)
                 .content("You're not in a voice channel?")?
-                .exec()
                 .await?;
             return Ok(());
         }
@@ -346,7 +400,6 @@ async fn join(
         .http
         .create_message(msg.channel_id)
         .content(&content)?
-        .exec()
         .await?;
 
     Ok(())
@@ -365,7 +418,6 @@ async fn leave(
         .http
         .create_message(msg.channel_id)
         .content("Left the channel")?
-        .exec()
         .await?;
 
     Ok(())
@@ -456,7 +508,6 @@ async fn play(
                 .http
                 .create_message(msg.channel_id)
                 .content(&content)?
-                .exec()
                 .await?;
 
             if let Some(call_lock) = state.songbird.get(guild_id) {
@@ -491,7 +542,6 @@ async fn play(
                 .http
                 .create_message(msg.channel_id)
                 .content("Didn't find any results")?
-                .exec()
                 .await?;
         }
     }
@@ -534,7 +584,6 @@ async fn pause(
         .http
         .create_message(msg.channel_id)
         .content(&content)?
-        .exec()
         .await?;
 
     Ok(())
@@ -557,7 +606,6 @@ async fn stop(
         .http
         .create_message(msg.channel_id)
         .content("Stopped the track")?
-        .exec()
         .await?;
 
     Ok(())
@@ -578,7 +626,6 @@ async fn volume(
             .http
             .create_message(msg.channel_id)
             .content("Use !volume <value>")?
-            .exec()
             .await?;
     } else {
         let volume = content.parse::<f32>()?;
@@ -588,7 +635,6 @@ async fn volume(
                 .http
                 .create_message(msg.channel_id)
                 .content("Invalid volume!")?
-                .exec()
                 .await?;
 
             return Ok(());
@@ -607,7 +653,6 @@ async fn volume(
             .http
             .create_message(msg.channel_id)
             .content(&content)?
-            .exec()
             .await?;
     }
 
@@ -630,8 +675,7 @@ async fn help(
         }
     }
     if state_info.lock().await.is_joined {
-
-        let path =  fs::canonicalize("./help.txt");
+        let path = fs::canonicalize("./help.txt");
         let file = File::open(path.unwrap()).expect("err");
         let reader = BufReader::new(file);
 
@@ -652,15 +696,11 @@ async fn help(
             .http
             .create_message(msg.channel_id)
             .embeds(&[embed])?
-            .exec()
             .await?;
     }
 
     Ok(())
 }
-
-
-
 
 async fn radiolist(
     msg: Message,
@@ -678,8 +718,7 @@ async fn radiolist(
         }
     }
     if state_info.lock().await.is_joined {
-
-        let path =  fs::canonicalize("./radiolist.txt");
+        let path = fs::canonicalize("./radiolist.txt");
         let file = File::open(path.unwrap()).expect("err");
         let reader = BufReader::new(file);
 
@@ -700,13 +739,11 @@ async fn radiolist(
             .http
             .create_message(msg.channel_id)
             .embeds(&[embed])?
-            .exec()
             .await?;
     }
 
     Ok(())
 }
-
 
 async fn time(
     msg: Message,
@@ -758,7 +795,6 @@ async fn time(
             .http
             .create_message(msg.channel_id)
             .content(&part1)?
-            .exec()
             .await?;
     }
 
@@ -790,7 +826,6 @@ async fn list(
                 .http
                 .create_message(msg.channel_id)
                 .content(&"No songs in queue!")?
-                .exec()
                 .await?;
         } else {
             for item in list {
@@ -810,7 +845,6 @@ async fn list(
                     .http
                     .create_message(msg.channel_id)
                     .content(&content)?
-                    .exec()
                     .await?;
             }
         }
@@ -879,7 +913,6 @@ async fn add(
                 .http
                 .create_message(msg.channel_id)
                 .content(&title)?
-                .exec()
                 .await?;
         }
     }
@@ -932,14 +965,12 @@ async fn description(
                     .http
                     .create_message(msg.channel_id)
                     .content(&result_final)?
-                    .exec()
                     .await?;
             } else {
                 state
                     .http
                     .create_message(msg.channel_id)
                     .content("`No song is currently playing!`")?
-                    .exec()
                     .await?;
             }
         }
@@ -995,7 +1026,6 @@ async fn radiozu(
             .http
             .create_message(msg.channel_id)
             .embeds(&[embed])?
-            .exec()
             .await?;
         if let Some(call_lock) = state.songbird.get(guild_id) {
             if state_info.lock().await.is_playing {
@@ -1016,7 +1046,7 @@ async fn radiozu(
     Ok(())
 }
 
-async fn radiodeep(
+async fn radio24house(
     msg: Message,
     state: State,
     state_info: Arc<Mutex<StateInfo>>,
@@ -1034,7 +1064,7 @@ async fn radiodeep(
     if state_info.lock().await.is_joined {
         let a = Command::new("ffmpeg")
             .arg("-i")
-            .arg("http://91.121.175.25:8000/mp3/stream")
+            .arg("https://24houseradio-adradio.radioca.st/128")
             .arg("-f")
             .arg("wav")
             .arg("-ac")
@@ -1053,7 +1083,7 @@ async fn radiodeep(
         )?;
 
         let embed = EmbedBuilder::new()
-            .title("Radio Deep House Network")
+            .title("Radio 24 House")
             .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
             .image(source)
             .validate()?
@@ -1063,7 +1093,6 @@ async fn radiodeep(
             .http
             .create_message(msg.channel_id)
             .embeds(&[embed])?
-            .exec()
             .await?;
         if let Some(call_lock) = state.songbird.get(guild_id) {
             if state_info.lock().await.is_playing {
@@ -1084,7 +1113,7 @@ async fn radiodeep(
     Ok(())
 }
 
-async fn radiodeepfm(
+async fn radioclubbers(
     msg: Message,
     state: State,
     state_info: Arc<Mutex<StateInfo>>,
@@ -1102,7 +1131,7 @@ async fn radiodeepfm(
     if state_info.lock().await.is_joined {
         let a = Command::new("ffmpeg")
             .arg("-i")
-            .arg("https://hoth.alonhosting.com:4655/stream")
+            .arg("https://s3.slotex.pl/shoutcast/7300/stream?sid=1")
             .arg("-f")
             .arg("wav")
             .arg("-ac")
@@ -1121,7 +1150,7 @@ async fn radiodeepfm(
         )?;
 
         let embed = EmbedBuilder::new()
-            .title("Radio Deep House FM")
+            .title("Radio Clubbers")
             .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
             .image(source)
             .validate()?
@@ -1131,7 +1160,6 @@ async fn radiodeepfm(
             .http
             .create_message(msg.channel_id)
             .embeds(&[embed])?
-            .exec()
             .await?;
         if let Some(call_lock) = state.songbird.get(guild_id) {
             if state_info.lock().await.is_playing {
@@ -1151,6 +1179,141 @@ async fn radiodeepfm(
 
     Ok(())
 }
+
+async fn radiouv(
+    msg: Message,
+    state: State,
+    state_info: Arc<Mutex<StateInfo>>,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    if !state_info.lock().await.is_joined {
+        let res = join(msg.clone(), state.clone(), state_info.clone())
+            .await
+            .ok();
+
+        match res {
+            Some(result) => println!("{:?}", result),
+            None => println!("ERR"),
+        }
+    }
+    if state_info.lock().await.is_joined {
+        let a = Command::new("ffmpeg")
+            .arg("-i")
+            .arg("https://stream-21.zeno.fm/s98kga59qnruv?zs=y9vZRej5RV69g4Ld8fD7QQ")
+            .arg("-f")
+            .arg("wav")
+            .arg("-ac")
+            .arg("2")
+            .arg("-acodec")
+            .arg("pcm_s16le")
+            .arg("-ar")
+            .arg("48000")
+            .arg("-")
+            .stdout(Stdio::piped())
+            .spawn();
+        let test: Input = ChildContainer::from(a.unwrap()).into();
+        let guild_id = msg.guild_id.unwrap();
+        let source = ImageSource::url(
+            "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
+        )?;
+
+        let embed = EmbedBuilder::new()
+            .title("Radio Underground Vibe")
+            .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
+            .image(source)
+            .validate()?
+            .build();
+
+        state
+            .http
+            .create_message(msg.channel_id)
+            .embeds(&[embed])?
+            .await?;
+        if let Some(call_lock) = state.songbird.get(guild_id) {
+            if state_info.lock().await.is_playing {
+                let mut call = call_lock.lock().await;
+                let _ = call.stop();
+                state_info.lock().await.set_is_playing(false);
+            }
+
+            let mut call = call_lock.lock().await;
+            let handle = call.play_input(test);
+            state_info.lock().await.set_is_playing(true);
+
+            let mut store = state.trackdata.write().await;
+            store.insert(guild_id, handle);
+        }
+    }
+
+    Ok(())
+}
+
+async fn radiodancefmro(
+    msg: Message,
+    state: State,
+    state_info: Arc<Mutex<StateInfo>>,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    if !state_info.lock().await.is_joined {
+        let res = join(msg.clone(), state.clone(), state_info.clone())
+            .await
+            .ok();
+
+        match res {
+            Some(result) => println!("{:?}", result),
+            None => println!("ERR"),
+        }
+    }
+    if state_info.lock().await.is_joined {
+        let a = Command::new("ffmpeg")
+            .arg("-i")
+            .arg("https://edge126.rcs-rds.ro/profm/dancefm.mp3")
+            .arg("-f")
+            .arg("wav")
+            .arg("-ac")
+            .arg("2")
+            .arg("-acodec")
+            .arg("pcm_s16le")
+            .arg("-ar")
+            .arg("48000")
+            .arg("-")
+            .stdout(Stdio::piped())
+            .spawn();
+        let test: Input = ChildContainer::from(a.unwrap()).into();
+        let guild_id = msg.guild_id.unwrap();
+        let source = ImageSource::url(
+            "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
+        )?;
+
+        let embed = EmbedBuilder::new()
+            .title("DanceFM.RO")
+            .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
+            .image(source)
+            .validate()?
+            .build();
+
+        state
+            .http
+            .create_message(msg.channel_id)
+            .embeds(&[embed])?
+            .await?;
+        if let Some(call_lock) = state.songbird.get(guild_id) {
+            if state_info.lock().await.is_playing {
+                let mut call = call_lock.lock().await;
+                let _ = call.stop();
+                state_info.lock().await.set_is_playing(false);
+            }
+
+            let mut call = call_lock.lock().await;
+            let handle = call.play_input(test);
+            state_info.lock().await.set_is_playing(true);
+
+            let mut store = state.trackdata.write().await;
+            store.insert(guild_id, handle);
+        }
+    }
+
+    Ok(())
+}
+
 
 async fn radiohouse(
     msg: Message,
@@ -1220,74 +1383,6 @@ async fn radiohouse(
     Ok(())
 }
 
-async fn radiohousero(
-    msg: Message,
-    state: State,
-    state_info: Arc<Mutex<StateInfo>>,
-) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-    if !state_info.lock().await.is_joined {
-        let res = join(msg.clone(), state.clone(), state_info.clone())
-            .await
-            .ok();
-
-        match res {
-            Some(result) => println!("{:?}", result),
-            None => println!("ERR"),
-        }
-    }
-    if state_info.lock().await.is_joined {
-        let a = Command::new("ffmpeg")
-            .arg("-i")
-            .arg("http://62.210.105.16:7000/;stream/1")
-            .arg("-f")
-            .arg("wav")
-            .arg("-ac")
-            .arg("2")
-            .arg("-acodec")
-            .arg("pcm_s16le")
-            .arg("-ar")
-            .arg("48000")
-            .arg("-")
-            .stdout(Stdio::piped())
-            .spawn();
-        let test: Input = ChildContainer::from(a.unwrap()).into();
-        let guild_id = msg.guild_id.unwrap();
-        let source = ImageSource::url(
-            "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
-        )?;
-
-        let embed = EmbedBuilder::new()
-            .title("Radio House RO")
-            .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
-            .image(source)
-            .validate()?
-            .build();
-
-        state
-            .http
-            .create_message(msg.channel_id)
-            .embeds(&[embed])?
-            .exec()
-            .await?;
-        if let Some(call_lock) = state.songbird.get(guild_id) {
-            if state_info.lock().await.is_playing {
-                let mut call = call_lock.lock().await;
-                let _ = call.stop();
-                state_info.lock().await.set_is_playing(false);
-            }
-
-            let mut call = call_lock.lock().await;
-            let handle = call.play_input(test);
-            state_info.lock().await.set_is_playing(true);
-
-            let mut store = state.trackdata.write().await;
-            store.insert(guild_id, handle);
-        }
-    }
-
-    Ok(())
-}
-
 async fn radiovirgin(
     msg: Message,
     state: State,
@@ -1326,7 +1421,7 @@ async fn radiovirgin(
             "https://virginradio.ro/wp-content/uploads/2019/06/VR_ROMANIA_WHITE-STAR-LOGO_RGB_ONLINE_1600x1600.png",
         )?;
         let embed = EmbedBuilder::new()
-            .title("RadioZU Romania")
+            .title("Virgin Radio Romania")
             .field(EmbedFieldBuilder::new("Requestor", msg.author.name).inline())
             .image(source)
             .validate()?
@@ -1336,7 +1431,6 @@ async fn radiovirgin(
             .http
             .create_message(msg.channel_id)
             .embeds(&[embed])?
-            .exec()
             .await?;
 
         if let Some(call_lock) = state.songbird.get(guild_id) {
@@ -1388,7 +1482,7 @@ async fn radiovirgin(
 
 fn get_discord_token() -> String {
     let mut return_string: String = String::default();
-    let path =  fs::canonicalize("./token.txt").unwrap();
+    let path = fs::canonicalize("./token.txt").unwrap();
     if path.exists() {
         return_string = read_to_string(path).expect("Unable to open file");
     } else {
