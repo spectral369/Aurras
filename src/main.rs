@@ -267,11 +267,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                     Arc::clone(&state),
                     Arc::clone(&state_info),
                 )),
-                Some("!radiouv") => spawn(radiouv(
-                    msg.0,
-                    Arc::clone(&state),
-                    Arc::clone(&state_info),
-                )),
+                Some("!radiouv") => {
+                    spawn(radiouv(msg.0, Arc::clone(&state), Arc::clone(&state_info)))
+                }
                 Some("!radiohouse") => spawn(radiohouse(
                     msg.0,
                     Arc::clone(&state),
@@ -319,7 +317,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                             let mut i = 0;
                             'test: loop {
                                 let id1 = mem_ids.next().unwrap().1.user_id();
-                                //   println!("ID: {}", id1);
+
                                 ids.push(id1.get());
                                 i = i + 1;
                                 if i == nr_mem {
@@ -327,10 +325,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                                 }
                             }
 
-                            //println!("no joined: {}", nr_mem);
                             if nr_mem < 2 && ids.contains(&bot_id) {
-                                //   j.songbird.leave(guild_id).await;
-                                let _res = j.songbird.remove(guild_id).await;
+                                let _song_res = j.songbird.remove(guild_id).await;
                                 is_finished = true;
                             }
                         });
@@ -412,7 +408,11 @@ async fn leave(
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let guild_id = msg.guild_id.unwrap();
     state_info.lock().await.set_is_joined(false);
-    state.songbird.leave(guild_id).await?;
+
+    if state_info.lock().await.is_playing {
+        state_info.lock().await.set_is_playing(false);
+        state.songbird.remove(guild_id).await?;
+    }
 
     state
         .http
@@ -1314,7 +1314,6 @@ async fn radiodancefmro(
     Ok(())
 }
 
-
 async fn radiohouse(
     msg: Message,
     state: State,
@@ -1332,6 +1331,8 @@ async fn radiohouse(
     }
     if state_info.lock().await.is_joined {
         let a = Command::new("ffmpeg")
+            .arg("-thread_queue_size")
+            .arg("3")
             .arg("-i")
             .arg("https://deephouseradio.radioca.st/deep?type=http&nocache=16")
             .arg("-f")
@@ -1362,7 +1363,6 @@ async fn radiohouse(
             .http
             .create_message(msg.channel_id)
             .embeds(&[embed])?
-            .exec()
             .await?;
         if let Some(call_lock) = state.songbird.get(guild_id) {
             if state_info.lock().await.is_playing {
@@ -1483,6 +1483,7 @@ async fn radiovirgin(
 fn get_discord_token() -> String {
     let mut return_string: String = String::default();
     let path = fs::canonicalize("./token.txt").unwrap();
+    println!("{:?}",path);
     if path.exists() {
         return_string = read_to_string(path).expect("Unable to open file");
     } else {
@@ -1497,6 +1498,7 @@ fn get_discord_token() -> String {
             .write_all("<Insert discord token here>".as_bytes())
             .expect("err");
     }
+    println!("{}",return_string);
 
     return_string
 }
