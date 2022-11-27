@@ -12,7 +12,7 @@ use std::{
     error::Error,
     fs::{self, File, OpenOptions},
     future::Future,
-    process::{self, Stdio},
+    process::{self, exit, Stdio},
     sync::Arc,
     time::Duration,
 };
@@ -80,6 +80,7 @@ impl Queue1 {
     }
 }
 
+#[derive(Clone)]
 struct StateInfo {
     is_joined: bool,
     current_song_desc: String,
@@ -202,8 +203,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     };
 
     while let Some((_, event)) = events.next().await {
-        //id
-        // let ev = event.clone();
         state.standby.process(&event);
         state.cache.update(&event);
         state.songbird.process(&event).await;
@@ -216,7 +215,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 
             match msg.content.splitn(2, ' ').next() {
                 Some("!join") => spawn(join(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
-                Some("!leave") => spawn(leave(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
+                Some("!leave") => {
+                    spawn(leave(msg.0, Arc::clone(&state), Arc::clone(&state_info)));
+                }
                 Some("!pause") => spawn(pause(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
                 Some("!play") => spawn(play(
                     msg.0,
@@ -284,8 +285,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                     spawn(volume(msg.0, Arc::clone(&state), Arc::clone(&state_info)))
                 }
                 Some("!repeat") => spawn(time(msg.0, Arc::clone(&state), Arc::clone(&state_info))),
+                Some("!reload") => {
+                    exit(3);
+                }
                 _ => continue,
             }
+            let is_finished = Arc::new(Mutex::new(0));
+            // println!("{:?}", state_info.lock().await.is_joined);
             if state_info.lock().await.is_joined {
                 let guild_id = msg2.guild_id.ok_or("No guild id")?;
 
@@ -298,22 +304,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                     .channel_id();
 
                 let u = state.clone();
-                let mut is_finished: bool = false;
-                let mut interval = time::interval(Duration::from_secs(25));
-                tokio::spawn(async move {
-                    let h = Arc::clone(&u);
 
+                let mut interval = time::interval(Duration::from_secs(10));
+                let te = tokio::spawn(async move {
+                    let h = Arc::clone(&u);
                     'mymainloop: loop {
                         let j = Arc::clone(&h);
-
+                        let is_finished2 = Arc::clone(&is_finished);
                         tokio::spawn(async move {
                             let nr_mem = j.cache.voice_channel_states(voice_id).unwrap().count();
                             let bot_id: u64 = 920990750030848030;
                             let mut mem_ids =
                                 j.cache.voice_channel_states(voice_id).unwrap().enumerate();
-
                             let mut ids: Vec<u64> = Vec::new();
-
                             let mut i = 0;
                             'test: loop {
                                 let id1 = mem_ids.next().unwrap().1.user_id();
@@ -326,17 +329,29 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                             }
 
                             if nr_mem < 2 && ids.contains(&bot_id) {
+                                let _song_re = j.songbird.leave(guild_id).await;
                                 let _song_res = j.songbird.remove(guild_id).await;
-                                is_finished = true;
+
+                                let mut lock = is_finished2.lock().await;
+                                *lock += 1;
                             }
                         });
-                        if is_finished {
+                        let lock = is_finished.lock().await;
+                        // println!("{:?}", *lock);
+                        if *lock == 1 {
+                            println!("break !");
+                            // *lock = 0;
                             break 'mymainloop;
+                        } else {
+                            interval.tick().await;
                         }
-                        interval.tick().await;
                     }
                 });
+                if msg2.0.content.contains("leave") {
+                    te.abort();
+                }
             }
+            state_info.lock().await.set_is_joined(false);
         }
     }
 
@@ -407,10 +422,15 @@ async fn leave(
     state_info: Arc<Mutex<StateInfo>>,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let guild_id = msg.guild_id.unwrap();
-    state_info.lock().await.set_is_joined(false);
 
     if state_info.lock().await.is_playing {
-        state_info.lock().await.set_is_playing(false);
+        if let Some(call_lock) = state.songbird.get(guild_id) {
+            let mut call = call_lock.lock().await;
+            let _ = call.stop();
+            state_info.lock().await.set_is_playing(false);
+        }
+        state.songbird.leave(guild_id).await?;
+        // state_info.lock().await.set_is_joined(false);
         state.songbird.remove(guild_id).await?;
     }
 
@@ -436,10 +456,13 @@ async fn play(
             .ok();
 
         match res {
-            Some(result) => println!("{:?}", result),
+            Some(result) => {
+                println!("{:?}", result)
+            }
             None => println!("ERR"),
         }
     }
+
     if state_info.lock().await.is_joined {
         let b = msg.content.clone();
         let index1 = b.find(" ");
@@ -1483,7 +1506,6 @@ async fn radiovirgin(
 fn get_discord_token() -> String {
     let mut return_string: String = String::default();
     let path = fs::canonicalize("./token.txt").unwrap();
-    println!("{:?}",path);
     if path.exists() {
         return_string = read_to_string(path).expect("Unable to open file");
     } else {
@@ -1498,7 +1520,6 @@ fn get_discord_token() -> String {
             .write_all("<Insert discord token here>".as_bytes())
             .expect("err");
     }
-    println!("{}",return_string);
 
     return_string
 }

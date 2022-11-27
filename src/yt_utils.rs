@@ -54,7 +54,7 @@ impl StringUtils for str {
         self.substring(start, len)
     }
 }
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct YtInfo {
     _yt_link: String,
     yt_desc: String,
