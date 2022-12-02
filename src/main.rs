@@ -25,8 +25,8 @@ use twilight_gateway::{
 use twilight_model::{
     channel::Message,
     gateway::{
-        payload::outgoing::update_presence::UpdatePresencePayload,
-        presence::{Activity, ActivityType, Status},
+        payload::outgoing::{update_presence::UpdatePresencePayload, UpdatePresence},
+        presence::{Activity, ActivityType, MinimalActivity, Status},
     },
     id::{marker::GuildMarker, Id},
 };
@@ -40,6 +40,7 @@ use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_http::Client as HttpClient;
 
 use std::time::Instant;
+use twilight_gateway::Cluster;
 use twilight_standby::Standby;
 use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, ImageSource};
 
@@ -52,6 +53,7 @@ struct StateRef {
     http: HttpClient,
     trackdata: RwLock<HashMap<Id<GuildMarker>, TrackHandle>>,
     songbird: Songbird,
+    cluster: Arc<Cluster>,
     standby: Standby,
     cache: InMemoryCache,
 }
@@ -171,9 +173,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             .build()
             .await?;
 
+        let cluster2 = Arc::new(cluster);
+        let cluster3 = cluster2.clone();
+
         let thi = tokio::spawn(async move {
-            cluster.up().await;
-            return Songbird::twilight(Arc::new(cluster), user_id);
+            cluster2.up().await;
+            return Songbird::twilight(cluster2 /*Arc::new(cluster)*/, user_id);
         });
 
         let songbird = thi.await?;
@@ -183,6 +188,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 http,
                 trackdata: Default::default(),
                 songbird,
+                cluster: cluster3,
                 standby: Standby::new(),
                 cache: InMemoryCache::builder()
                     .resource_types(ResourceType::VOICE_STATE | ResourceType::GUILD)
@@ -544,6 +550,18 @@ async fn play(
                 let handle = call.play_input(src.into());
                 state_info.lock().await.set_is_playing(true);
 
+                let activity = Activity::from(MinimalActivity {
+                    kind: ActivityType::Listening,
+                    name: metadata.title.unwrap_or("<unknown>".to_string()),
+                    url: None,
+                });
+                let request =
+                    UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+                for shard in state.cluster.shards() {
+                    shard.command(&request).await?;
+                }
+
                 let mut store = state.trackdata.write().await;
                 store.insert(guild_id, handle);
 
@@ -615,14 +633,25 @@ async fn pause(
 async fn stop(
     msg: Message,
     state: State,
-    state_info: Arc<Mutex<StateInfo>>,
+    _state_info: Arc<Mutex<StateInfo>>,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let guild_id = msg.guild_id.unwrap();
 
     if let Some(call_lock) = state.songbird.get(guild_id.into_nonzero()) {
         let mut call = call_lock.lock().await;
         let _ = call.stop();
-        state_info.lock().await.set_is_playing(false);
+        //  state_info.lock().await.set_is_playing(false);
+
+        let activity = Activity::from(MinimalActivity {
+            kind: ActivityType::Listening,
+            name: "No audio".to_owned(),
+            url: None,
+        });
+        let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+        for shard in state.cluster.shards() {
+            shard.command(&request).await?;
+        }
     }
 
     state
@@ -1061,6 +1090,17 @@ async fn radiozu(
             let handle = call.play_input(test);
             state_info.lock().await.set_is_playing(true);
 
+            let activity = Activity::from(MinimalActivity {
+                kind: ActivityType::Listening,
+                name: "RadioZU Romania".to_owned(),
+                url: None,
+            });
+            let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+            for shard in state.cluster.shards() {
+                shard.command(&request).await?;
+            }
+
             let mut store = state.trackdata.write().await;
             store.insert(guild_id, handle);
         }
@@ -1127,6 +1167,17 @@ async fn radio24house(
             let mut call = call_lock.lock().await;
             let handle = call.play_input(test);
             state_info.lock().await.set_is_playing(true);
+
+            let activity = Activity::from(MinimalActivity {
+                kind: ActivityType::Listening,
+                name: "Radio 24 House".to_owned(),
+                url: None,
+            });
+            let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+            for shard in state.cluster.shards() {
+                shard.command(&request).await?;
+            }
 
             let mut store = state.trackdata.write().await;
             store.insert(guild_id, handle);
@@ -1195,6 +1246,17 @@ async fn radioclubbers(
             let handle = call.play_input(test);
             state_info.lock().await.set_is_playing(true);
 
+            let activity = Activity::from(MinimalActivity {
+                kind: ActivityType::Listening,
+                name: "Radio Clubbers".to_owned(),
+                url: None,
+            });
+            let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+            for shard in state.cluster.shards() {
+                shard.command(&request).await?;
+            }
+
             let mut store = state.trackdata.write().await;
             store.insert(guild_id, handle);
         }
@@ -1261,6 +1323,16 @@ async fn radiouv(
             let mut call = call_lock.lock().await;
             let handle = call.play_input(test);
             state_info.lock().await.set_is_playing(true);
+            let activity = Activity::from(MinimalActivity {
+                kind: ActivityType::Listening,
+                name: "Radio Underground Vibe".to_owned(),
+                url: None,
+            });
+            let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+            for shard in state.cluster.shards() {
+                shard.command(&request).await?;
+            }
 
             let mut store = state.trackdata.write().await;
             store.insert(guild_id, handle);
@@ -1328,6 +1400,17 @@ async fn radiodancefmro(
             let mut call = call_lock.lock().await;
             let handle = call.play_input(test);
             state_info.lock().await.set_is_playing(true);
+
+            let activity = Activity::from(MinimalActivity {
+                kind: ActivityType::Listening,
+                name: "DanceFM.ro".to_owned(),
+                url: None,
+            });
+            let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+            for shard in state.cluster.shards() {
+                shard.command(&request).await?;
+            }
 
             let mut store = state.trackdata.write().await;
             store.insert(guild_id, handle);
@@ -1397,6 +1480,16 @@ async fn radiohouse(
             let mut call = call_lock.lock().await;
             let handle = call.play_input(test);
             state_info.lock().await.set_is_playing(true);
+            let activity = Activity::from(MinimalActivity {
+                kind: ActivityType::Listening,
+                name: "Radio House Santa monica".to_owned(),
+                url: None,
+            });
+            let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+            for shard in state.cluster.shards() {
+                shard.command(&request).await?;
+            }
 
             let mut store = state.trackdata.write().await;
             store.insert(guild_id, handle);
@@ -1467,30 +1560,16 @@ async fn radiovirgin(
             let handle = call.play_input(test);
             state_info.lock().await.set_is_playing(true);
 
-            /* let activity = Activity::from(MinimalActivity {
-                kind: ActivityType::Custom,
-                name: "Playing Virgin Radio Romania".to_owned(),
+            let activity = Activity::from(MinimalActivity {
+                kind: ActivityType::Listening,
+                name: "Virgin Radio Romania".to_owned(),
                 url: None,
             });
             let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
 
-            // Send the request over the shard.
-            // let _rest = state.cluster.command(2, &request).await;
-            //  let shard_id =  state.cluster.shards().next().take().unwrap().info().unwrap().id();
-            let shard_id = state
-                .cluster
-                .shards()
-                .enumerate()
-                .next()
-                .unwrap()
-                .1
-                .info()
-                .unwrap()
-                .id();
-            println!("{:?}", shard_id);
-            let _rest = state.cluster.command(1, &request).await;
-            // println!("Next line is the shit");
-            println!("{:?}", _rest);*/
+            for shard in state.cluster.shards() {
+                shard.command(&request).await?;
+            }
 
             let mut store = state.trackdata.write().await;
             store.insert(guild_id, handle);
@@ -1507,7 +1586,10 @@ fn get_discord_token() -> String {
     let mut return_string: String = String::default();
     let path = fs::canonicalize("./token.txt").unwrap();
     if path.exists() {
-        return_string = read_to_string(path).expect("Unable to open file");
+        return_string = read_to_string(path)
+            .expect("Unable to open file")
+            .trim()
+            .to_string();
     } else {
         let mut file1 = OpenOptions::new()
             .create(true)
@@ -1520,6 +1602,6 @@ fn get_discord_token() -> String {
             .write_all("<Insert discord token here>".as_bytes())
             .expect("err");
     }
-
+    println!("{:?}", return_string);
     return_string
 }
