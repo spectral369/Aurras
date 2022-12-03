@@ -158,8 +158,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                     flags: None,
                     id: None,
                     instance: None,
-                    kind: ActivityType::Playing,
-                    name: "RUST BOT DEMO".to_string(),
+                    kind: ActivityType::Listening,
+                    name: "Nothing".to_string(),
                     party: None,
                     secrets: None,
                     state: None,
@@ -297,7 +297,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 _ => continue,
             }
             let is_finished = Arc::new(Mutex::new(0));
-            // println!("{:?}", state_info.lock().await.is_joined);
             if state_info.lock().await.is_joined {
                 let guild_id = msg2.guild_id.ok_or("No guild id")?;
 
@@ -343,10 +342,24 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                             }
                         });
                         let lock = is_finished.lock().await;
-                        // println!("{:?}", *lock);
                         if *lock == 1 {
                             println!("break !");
-                            // *lock = 0;
+                            let activity = Activity::from(MinimalActivity {
+                                kind: ActivityType::Listening,
+                                name: "Nothing".to_string(),
+                                url: None,
+                            });
+                            let request = UpdatePresence::new(
+                                Vec::from([activity]),
+                                false,
+                                None,
+                                Status::Online,
+                            )
+                            .expect("err");
+
+                            for shard in u.cluster.shards() {
+                                let _result = shard.command(&request).await;
+                            }
                             break 'mymainloop;
                         } else {
                             interval.tick().await;
@@ -435,6 +448,16 @@ async fn leave(
             let _ = call.stop();
             state_info.lock().await.set_is_playing(false);
         }
+        let activity = Activity::from(MinimalActivity {
+            kind: ActivityType::Listening,
+            name: "Nothing".to_string(),
+            url: None,
+        });
+        let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+        for shard in state.cluster.shards() {
+            shard.command(&request).await?;
+        }
         state.songbird.leave(guild_id).await?;
         // state_info.lock().await.set_is_joined(false);
         state.songbird.remove(guild_id).await?;
@@ -506,7 +529,6 @@ async fn play(
                 .await
                 .set_current_song_link(yt_link.clone());
         }
-        //check if it's playing
 
         let guild_id = msg.guild_id.unwrap();
 
@@ -522,7 +544,6 @@ async fn play(
             src = YoutubeDl::new(reqwest::Client::new(), yt_link);
         }
 
-        //    let mut src = YoutubeDl::new(reqwest::Client::new(), yt_link);
         if let Ok(metadata) = src.aux_metadata().await {
             let content = format!(
                 "Playing **{:?}**",
@@ -644,7 +665,7 @@ async fn stop(
 
         let activity = Activity::from(MinimalActivity {
             kind: ActivityType::Listening,
-            name: "No audio".to_owned(),
+            name: "Nothing".to_owned(),
             url: None,
         });
         let request = UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
@@ -1602,6 +1623,5 @@ fn get_discord_token() -> String {
             .write_all("<Insert discord token here>".as_bytes())
             .expect("err");
     }
-    println!("{:?}", return_string);
     return_string
 }
