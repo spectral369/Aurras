@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use regex::Regex;
 use songbird::{
-    input::{ChildContainer, Compose, Input, YoutubeDl},
+    input::{ChildContainer, Compose, YoutubeDl},
     tracks::{PlayMode, TrackHandle, TrackState},
     EventContext, EventHandler, Songbird,
 };
@@ -17,10 +17,9 @@ use std::{
     time::Duration,
 };
 use std::{fs::read_to_string, io::prelude::*};
-use tokio::time::{self};
 use twilight_gateway::{
     cluster::{ClusterBuilder, ShardScheme},
-    Event, Intents,
+    Event, EventType, Intents,
 };
 use twilight_model::{
     channel::Message,
@@ -90,6 +89,8 @@ struct StateInfo {
     _yt_utils: yt_utils::YtInfo,
     current_song_length: Option<Duration>,
     is_playing: bool,
+    ffmpeg_id: Vec<u32>,
+    //  user_count: i8,
 }
 
 impl StateInfo {
@@ -108,6 +109,12 @@ impl StateInfo {
     pub fn set_is_playing(&mut self, value: bool) {
         self.is_playing = value;
     }
+    pub fn set_ffmpeg_id(&mut self, value: u32) {
+        self.ffmpeg_id.push(value);
+    }
+    /*pub fn set_user_count(&mut self, value: i8) {
+        self.user_count = value;
+    }*/
 }
 
 fn spawn(
@@ -201,6 +208,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 _yt_utils: Default::default(),
                 current_song_length: Option::default(),
                 is_playing: false,
+                ffmpeg_id: Vec::default(),
+                //  user_count: 0,
             })),
             Arc::new(Mutex::new(Queue1 {
                 queue: Vec::default(),
@@ -213,8 +222,74 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         state.cache.update(&event);
         state.songbird.process(&event).await;
 
+        if (event.kind() == EventType::VoiceStateUpdate)
+            || (event.kind() == EventType::VoiceServerUpdate)
+        {
+            // println!("EVENT KIND: {:?} ", event.kind());
+
+            let user_id2 = state.http.current_user().await?.model().await?.id;
+
+            let voice_id = state.cache.voice_state(user_id2, event.guild_id().unwrap());
+
+            let testss;
+            match voice_id {
+                Some(test01) => {
+                    testss = Some(test01.channel_id());
+                }
+                None => {
+                  //  println!("No val.");
+                    testss = None;
+                }
+            }
+            if testss.is_some() {
+                let info = state
+                    .cache
+                    .voice_channel_states(testss.unwrap())
+                    .unwrap()
+                    .count();
+                // println!("EVENT UPDATE : {:?} ", info);
+                // println!("INFO < 2 : {:?} ", info < 2);
+                //  println!("IS Joined : {:?} ", state_info.lock().await.is_joined);
+                if info < 2 {
+                    // let u = state.clone();
+                    if !state_info.lock().await.ffmpeg_id.is_empty() {
+                        let id = state_info.lock().await.ffmpeg_id.pop().unwrap();
+                        //println!("ID: {:?} \n",id);
+                        let sp = Command::new("kill").arg(id.to_string()).output();
+                        let _res = sp.unwrap();
+                    }
+
+                    if let Some(call_lock) = state.songbird.get(event.guild_id().unwrap()) {
+                        let mut call = call_lock.lock().await;
+                        let _ = call.stop();
+                        state_info.lock().await.set_is_playing(false);
+                    }
+
+                    //  println!("leave !!!");
+
+                    let _st1 = state.songbird.leave(event.guild_id().unwrap());
+                    let _st2 = state.songbird.remove(event.guild_id().unwrap());
+                    println!("{:?}", _st1.await);
+                    println!("{:?}", _st2.await);
+
+                    state_info.lock().await.set_is_joined(false);
+
+                    let activity = Activity::from(MinimalActivity {
+                        kind: ActivityType::Listening,
+                        name: "Nothing".to_owned(),
+                        url: None,
+                    });
+                    let request =
+                        UpdatePresence::new(Vec::from([activity]), false, None, Status::Online)?;
+
+                    for shard in state.cluster.shards() {
+                        shard.command(&request).await?;
+                    }
+                }
+            }
+        }
+
         if let Event::MessageCreate(msg) = event {
-            let msg2 = msg.clone();
             if msg.guild_id.is_none() || !msg.content.starts_with('!') {
                 continue;
             }
@@ -296,81 +371,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 }
                 _ => continue,
             }
-            let is_finished = Arc::new(Mutex::new(0));
-            if state_info.lock().await.is_joined {
-                let guild_id = msg2.guild_id.ok_or("No guild id")?;
-
-                let user_id = msg2.author.id;
-
-                let voice_id = state
-                    .cache
-                    .voice_state(user_id, guild_id.clone())
-                    .unwrap()
-                    .channel_id();
-
-                let u = state.clone();
-
-                let mut interval = time::interval(Duration::from_secs(10));
-                let te = tokio::spawn(async move {
-                    let h = Arc::clone(&u);
-                    'mymainloop: loop {
-                        let j = Arc::clone(&h);
-                        let is_finished2 = Arc::clone(&is_finished);
-                        tokio::spawn(async move {
-                            let nr_mem = j.cache.voice_channel_states(voice_id).unwrap().count();
-                            let bot_id: u64 = 920990750030848030;
-                            let mut mem_ids =
-                                j.cache.voice_channel_states(voice_id).unwrap().enumerate();
-                            let mut ids: Vec<u64> = Vec::new();
-                            let mut i = 0;
-                            'test: loop {
-                                let id1 = mem_ids.next().unwrap().1.user_id();
-
-                                ids.push(id1.get());
-                                i = i + 1;
-                                if i == nr_mem {
-                                    break 'test;
-                                }
-                            }
-
-                            if nr_mem < 2 && ids.contains(&bot_id) {
-                                let _song_re = j.songbird.leave(guild_id).await;
-                                let _song_res = j.songbird.remove(guild_id).await;
-
-                                let mut lock = is_finished2.lock().await;
-                                *lock += 1;
-                            }
-                        });
-                        let lock = is_finished.lock().await;
-                        if *lock == 1 {
-                            println!("break !");
-                            let activity = Activity::from(MinimalActivity {
-                                kind: ActivityType::Listening,
-                                name: "Nothing".to_string(),
-                                url: None,
-                            });
-                            let request = UpdatePresence::new(
-                                Vec::from([activity]),
-                                false,
-                                None,
-                                Status::Online,
-                            )
-                            .expect("err");
-
-                            for shard in u.cluster.shards() {
-                                let _result = shard.command(&request).await;
-                            }
-                            break 'mymainloop;
-                        } else {
-                            interval.tick().await;
-                        }
-                    }
-                });
-                if msg2.0.content.contains("leave") {
-                    te.abort();
-                }
-            }
-            state_info.lock().await.set_is_joined(false);
         }
     }
 
@@ -442,7 +442,7 @@ async fn leave(
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let guild_id = msg.guild_id.unwrap();
 
-    if state_info.lock().await.is_playing {
+    if state_info.lock().await.is_joined {
         if let Some(call_lock) = state.songbird.get(guild_id) {
             let mut call = call_lock.lock().await;
             let _ = call.stop();
@@ -459,15 +459,20 @@ async fn leave(
             shard.command(&request).await?;
         }
         state.songbird.leave(guild_id).await?;
-        // state_info.lock().await.set_is_joined(false);
+        state_info.lock().await.set_is_joined(false);
         state.songbird.remove(guild_id).await?;
+        state
+            .http
+            .create_message(msg.channel_id)
+            .content("Left the channel")?
+            .await?;
+    } else {
+        state
+            .http
+            .create_message(msg.channel_id)
+            .content("Not in a channel")?
+            .await?;
     }
-
-    state
-        .http
-        .create_message(msg.channel_id)
-        .content("Left the channel")?
-        .await?;
 
     Ok(())
 }
@@ -654,11 +659,18 @@ async fn pause(
 async fn stop(
     msg: Message,
     state: State,
-    _state_info: Arc<Mutex<StateInfo>>,
+    state_info: Arc<Mutex<StateInfo>>,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let guild_id = msg.guild_id.unwrap();
 
     if let Some(call_lock) = state.songbird.get(guild_id.into_nonzero()) {
+        if !state_info.lock().await.ffmpeg_id.is_empty() {
+            let id = state_info.lock().await.ffmpeg_id.pop().unwrap();
+            //println!("ID: {:?} \n",id);
+            let sp = Command::new("kill").arg(id.to_string()).output();
+            let _res = sp.unwrap();
+        }
+
         let mut call = call_lock.lock().await;
         let _ = call.stop();
         //  state_info.lock().await.set_is_playing(false);
@@ -1082,7 +1094,18 @@ async fn radiozu(
             .arg("-")
             .stdout(Stdio::piped())
             .spawn();
-        let test: Input = ChildContainer::from(a.unwrap()).into();
+        if !state_info.lock().await.ffmpeg_id.is_empty() {
+            let id = state_info.lock().await.ffmpeg_id.pop().unwrap();
+
+            let sp = Command::new("kill").arg(id.to_string()).output();
+            let _res = sp.unwrap();
+        }
+
+        let ch = a.unwrap();
+        let id = &ch.id();
+        state_info.lock().await.set_ffmpeg_id(*id);
+
+        let test = ChildContainer::from(ch).into();
         let guild_id = msg.guild_id.unwrap();
         let source = ImageSource::url(
             "https://static.tuneyou.com/images/logos/500_500/33/3133/RadioZU.jpg",
@@ -1160,7 +1183,18 @@ async fn radio24house(
             .arg("-")
             .stdout(Stdio::piped())
             .spawn();
-        let test: Input = ChildContainer::from(a.unwrap()).into();
+        if !state_info.lock().await.ffmpeg_id.is_empty() {
+            let id = state_info.lock().await.ffmpeg_id.pop().unwrap();
+
+            let sp = Command::new("kill").arg(id.to_string()).output();
+            let _res = sp.unwrap();
+        }
+
+        let ch = a.unwrap();
+        let id = &ch.id();
+        state_info.lock().await.set_ffmpeg_id(*id);
+
+        let test = ChildContainer::from(ch).into();
         let guild_id = msg.guild_id.unwrap();
         let source = ImageSource::url(
             "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
@@ -1238,7 +1272,18 @@ async fn radioclubbers(
             .arg("-")
             .stdout(Stdio::piped())
             .spawn();
-        let test: Input = ChildContainer::from(a.unwrap()).into();
+        if !state_info.lock().await.ffmpeg_id.is_empty() {
+            let id = state_info.lock().await.ffmpeg_id.pop().unwrap();
+
+            let sp = Command::new("kill").arg(id.to_string()).output();
+            let _res = sp.unwrap();
+        }
+
+        let ch = a.unwrap();
+        let id = &ch.id();
+        state_info.lock().await.set_ffmpeg_id(*id);
+
+        let test = ChildContainer::from(ch).into();
         let guild_id = msg.guild_id.unwrap();
         let source = ImageSource::url(
             "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
@@ -1316,7 +1361,18 @@ async fn radiouv(
             .arg("-")
             .stdout(Stdio::piped())
             .spawn();
-        let test: Input = ChildContainer::from(a.unwrap()).into();
+        if !state_info.lock().await.ffmpeg_id.is_empty() {
+            let id = state_info.lock().await.ffmpeg_id.pop().unwrap();
+
+            let sp = Command::new("kill").arg(id.to_string()).output();
+            let _res = sp.unwrap();
+        }
+
+        let ch = a.unwrap();
+        let id = &ch.id();
+        state_info.lock().await.set_ffmpeg_id(*id);
+
+        let test = ChildContainer::from(ch).into();
         let guild_id = msg.guild_id.unwrap();
         let source = ImageSource::url(
             "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
@@ -1393,7 +1449,18 @@ async fn radiodancefmro(
             .arg("-")
             .stdout(Stdio::piped())
             .spawn();
-        let test: Input = ChildContainer::from(a.unwrap()).into();
+        if !state_info.lock().await.ffmpeg_id.is_empty() {
+            let id = state_info.lock().await.ffmpeg_id.pop().unwrap();
+
+            let sp = Command::new("kill").arg(id.to_string()).output();
+            let _res = sp.unwrap();
+        }
+
+        let ch = a.unwrap();
+        let id = &ch.id();
+        state_info.lock().await.set_ffmpeg_id(*id);
+
+        let test = ChildContainer::from(ch).into();
         let guild_id = msg.guild_id.unwrap();
         let source = ImageSource::url(
             "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
@@ -1473,7 +1540,18 @@ async fn radiohouse(
             .arg("-")
             .stdout(Stdio::piped())
             .spawn();
-        let test: Input = ChildContainer::from(a.unwrap()).into();
+        if !state_info.lock().await.ffmpeg_id.is_empty() {
+            let id = state_info.lock().await.ffmpeg_id.pop().unwrap();
+
+            let sp = Command::new("kill").arg(id.to_string()).output();
+            let _res = sp.unwrap();
+        }
+
+        let ch = a.unwrap();
+        let id = &ch.id();
+        state_info.lock().await.set_ffmpeg_id(*id);
+
+        let test = ChildContainer::from(ch).into();
         let guild_id = msg.guild_id.unwrap();
         let source = ImageSource::url(
             "https://cdn2.vectorstock.com/i/1000x1000/01/16/radio-music-neon-logo-night-neon-vector-21420116.jpg",
@@ -1536,6 +1614,7 @@ async fn radiovirgin(
             None => println!("ERR"),
         }
     }
+
     if state_info.lock().await.is_joined {
         let a = Command::new("ffmpeg")
             .arg("-i")
@@ -1551,7 +1630,20 @@ async fn radiovirgin(
             .arg("-")
             .stdout(Stdio::piped())
             .spawn();
-        let test: Input = ChildContainer::from(a.unwrap()).into();
+
+        if !state_info.lock().await.ffmpeg_id.is_empty() {
+            let id = state_info.lock().await.ffmpeg_id.pop().unwrap();
+
+            let sp = Command::new("kill").arg(id.to_string()).output();
+            let _res = sp.unwrap();
+        }
+
+        let ch = a.unwrap();
+        let id = &ch.id();
+        state_info.lock().await.set_ffmpeg_id(*id);
+
+        let test = ChildContainer::from(ch).into();
+
         let guild_id = msg.guild_id.unwrap();
 
         let source = ImageSource::url(
