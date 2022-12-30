@@ -90,7 +90,6 @@ struct StateInfo {
     current_song_length: Option<Duration>,
     is_playing: bool,
     ffmpeg_id: Vec<u32>,
-    //  user_count: i8,
 }
 
 impl StateInfo {
@@ -112,9 +111,6 @@ impl StateInfo {
     pub fn set_ffmpeg_id(&mut self, value: u32) {
         self.ffmpeg_id.push(value);
     }
-    /*pub fn set_user_count(&mut self, value: i8) {
-        self.user_count = value;
-    }*/
 }
 
 fn spawn(
@@ -209,7 +205,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 current_song_length: Option::default(),
                 is_playing: false,
                 ffmpeg_id: Vec::default(),
-                //  user_count: 0,
             })),
             Arc::new(Mutex::new(Queue1 {
                 queue: Vec::default(),
@@ -237,7 +232,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                     testss = Some(test01.channel_id());
                 }
                 None => {
-                  //  println!("No val.");
+                    //  println!("No val.");
                     testss = None;
                 }
             }
@@ -434,7 +429,6 @@ async fn join(
 
     Ok(())
 }
-
 async fn leave(
     msg: Message,
     state: State,
@@ -476,7 +470,6 @@ async fn leave(
 
     Ok(())
 }
-
 async fn play(
     msg: Message,
     state: State,
@@ -670,11 +663,11 @@ async fn stop(
             let sp = Command::new("kill").arg(id.to_string()).output();
             let _res = sp.unwrap();
         }
-
-        let mut call = call_lock.lock().await;
-        let _ = call.stop();
-        //  state_info.lock().await.set_is_playing(false);
-
+        if state_info.lock().await.is_playing {
+            let mut call = call_lock.lock().await;
+            let _ = call.stop();
+            state_info.lock().await.set_is_playing(false);
+        }
         let activity = Activity::from(MinimalActivity {
             kind: ActivityType::Listening,
             name: "Nothing".to_owned(),
@@ -1152,7 +1145,6 @@ async fn radiozu(
 
     Ok(())
 }
-
 async fn radio24house(
     msg: Message,
     state: State,
