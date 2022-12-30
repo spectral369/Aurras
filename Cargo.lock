@@ -99,7 +99,7 @@ dependencies = [
  "regex",
  "reqwest",
  "songbird",
- "symphonia 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia",
  "tokio",
  "twilight-cache-inmemory",
  "twilight-gateway",
@@ -1737,7 +1737,7 @@ dependencies = [
 [[package]]
 name = "songbird"
 version = "0.3.0"
-source = "git+https://github.com/serenity-rs/songbird.git?branch=next#1594c4efa13f818e9a6efc239334e91883d50de7"
+source = "git+https://github.com/serenity-rs/songbird.git?rev=62cd0b1e3f6dc956cf97329ddaf38a19f8f7b374#62cd0b1e3f6dc956cf97329ddaf38a19f8f7b374"
 dependencies = [
  "async-trait",
  "audiopus",
@@ -1762,8 +1762,8 @@ dependencies = [
  "serenity-voice-model",
  "socket2",
  "streamcatcher",
- "symphonia 0.5.1 (git+https://github.com/pdeljanov/Symphonia)",
- "symphonia-core 0.5.1 (git+https://github.com/pdeljanov/Symphonia)",
+ "symphonia",
+ "symphonia-core",
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
@@ -1827,22 +1827,12 @@ dependencies = [
  "symphonia-codec-alac",
  "symphonia-codec-pcm",
  "symphonia-codec-vorbis",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
  "symphonia-format-isomp4",
  "symphonia-format-mkv",
  "symphonia-format-ogg",
  "symphonia-format-wav",
- "symphonia-metadata 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
-]
-
-[[package]]
-name = "symphonia"
-version = "0.5.1"
-source = "git+https://github.com/pdeljanov/Symphonia#0c1a1a42edff46b88842ac4c3f379c6d6a2ad60c"
-dependencies = [
- "lazy_static",
- "symphonia-core 0.5.1 (git+https://github.com/pdeljanov/Symphonia)",
- "symphonia-metadata 0.5.1 (git+https://github.com/pdeljanov/Symphonia)",
+ "symphonia-metadata",
 ]
 
 [[package]]
@@ -1851,8 +1841,8 @@ version = "0.5.1"
 source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3ef90d7b336e9fa00c20f77e3b54b5f1f84f123b"
 dependencies = [
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
- "symphonia-metadata 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
+ "symphonia-metadata",
  "symphonia-utils-xiph",
 ]
 
@@ -1864,8 +1854,8 @@ dependencies = [
  "bitflags",
  "lazy_static",
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
- "symphonia-metadata 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
+ "symphonia-metadata",
 ]
 
 [[package]]
@@ -1875,7 +1865,7 @@ source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3e
 dependencies = [
  "lazy_static",
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
 ]
 
 [[package]]
@@ -1884,7 +1874,7 @@ version = "0.5.1"
 source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3ef90d7b336e9fa00c20f77e3b54b5f1f84f123b"
 dependencies = [
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
 ]
 
 [[package]]
@@ -1893,7 +1883,7 @@ version = "0.5.1"
 source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3ef90d7b336e9fa00c20f77e3b54b5f1f84f123b"
 dependencies = [
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
 ]
 
 [[package]]
@@ -1902,7 +1892,7 @@ version = "0.5.1"
 source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3ef90d7b336e9fa00c20f77e3b54b5f1f84f123b"
 dependencies = [
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
  "symphonia-utils-xiph",
 ]
 
@@ -1910,18 +1900,6 @@ dependencies = [
 name = "symphonia-core"
 version = "0.5.1"
 source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3ef90d7b336e9fa00c20f77e3b54b5f1f84f123b"
-dependencies = [
- "arrayvec",
- "bitflags",
- "bytemuck",
- "lazy_static",
- "log",
-]
-
-[[package]]
-name = "symphonia-core"
-version = "0.5.1"
-source = "git+https://github.com/pdeljanov/Symphonia#0c1a1a42edff46b88842ac4c3f379c6d6a2ad60c"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -1937,8 +1915,8 @@ source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3e
 dependencies = [
  "encoding_rs",
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
- "symphonia-metadata 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
+ "symphonia-metadata",
  "symphonia-utils-xiph",
 ]
 
@@ -1949,8 +1927,8 @@ source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3e
 dependencies = [
  "lazy_static",
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
- "symphonia-metadata 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
+ "symphonia-metadata",
  "symphonia-utils-xiph",
 ]
 
@@ -1960,8 +1938,8 @@ version = "0.5.1"
 source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3ef90d7b336e9fa00c20f77e3b54b5f1f84f123b"
 dependencies = [
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
- "symphonia-metadata 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
+ "symphonia-metadata",
  "symphonia-utils-xiph",
 ]
 
@@ -1971,8 +1949,8 @@ version = "0.5.1"
 source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3ef90d7b336e9fa00c20f77e3b54b5f1f84f123b"
 dependencies = [
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
- "symphonia-metadata 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
+ "symphonia-metadata",
 ]
 
 [[package]]
@@ -1983,18 +1961,7 @@ dependencies = [
  "encoding_rs",
  "lazy_static",
  "log",
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
-]
-
-[[package]]
-name = "symphonia-metadata"
-version = "0.5.1"
-source = "git+https://github.com/pdeljanov/Symphonia#0c1a1a42edff46b88842ac4c3f379c6d6a2ad60c"
-dependencies = [
- "encoding_rs",
- "lazy_static",
- "log",
- "symphonia-core 0.5.1 (git+https://github.com/pdeljanov/Symphonia)",
+ "symphonia-core",
 ]
 
 [[package]]
@@ -2002,8 +1969,8 @@ name = "symphonia-utils-xiph"
 version = "0.5.1"
 source = "git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes#3ef90d7b336e9fa00c20f77e3b54b5f1f84f123b"
 dependencies = [
- "symphonia-core 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
- "symphonia-metadata 0.5.1 (git+https://github.com/FelixMcFelix/Symphonia?branch=songbird-fixes)",
+ "symphonia-core",
+ "symphonia-metadata",
 ]
 
 [[package]]

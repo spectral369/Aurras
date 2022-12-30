@@ -33,7 +33,8 @@ async-trait = "0.1.60"
 [dependencies.songbird]
 default-features = false
 git = "https://github.com/serenity-rs/songbird.git"
-branch = "next"
+#branch = "next"
+rev = "62cd0b1e3f6dc956cf97329ddaf38a19f8f7b374"
 features = ["rustls", "driver", "gateway", "twilight", "builtin-queue"]
 
 
